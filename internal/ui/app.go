@@ -19,6 +19,9 @@ import (
 // Deps carries what the UI needs from main.
 type Deps struct {
 	Store *store.Store
+	// ReleaseSingleton frees the single-instance lock, so an in-app restart
+	// can spawn the next process before this one quits.
+	ReleaseSingleton func()
 	// OnBooted runs once the background boot finished, with the dataset
 	// it opened (nil when the files failed their integrity check).
 	OnBooted func(*npy.Dataset)

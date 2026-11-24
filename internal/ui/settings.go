@@ -2,9 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/nsgo-dev/nsgo/base"
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/ui"
 
@@ -22,6 +25,7 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 	// effect after a restart, so it stays what the app started with.
 	effective := mcp.PortFromSettings(st)
 	portSig := core.NewSignal(cx, strconv.Itoa(effective))
+	restartSig := core.NewSignal(cx, false)
 
 	mcpAddr := fmt.Sprintf("http://127.0.0.1:%d/mcp", effective)
 	mcpConfig := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"pixelicon\": {\n      \"url\": \"%s\"\n    }\n  }\n}", mcpAddr)
@@ -61,8 +65,30 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 			toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "保存失败", Description: err.Error()})
 			return
 		}
-		toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "设置已保存",
-			Description: "MCP 端口重启后生效"})
+		// The panel stays open under the restart dialog; 稍后 closes both.
+		restartSig.Set(true)
+	}
+
+	// restart spawns the next process and quits this one, handing the
+	// singleton lock over first so the new instance can take it.
+	restart := func() {
+		restartSig.Set(false)
+		if deps.ReleaseSingleton != nil {
+			deps.ReleaseSingleton()
+		}
+		exe, err := os.Executable()
+		if err == nil {
+			if err := exec.Command(exe, os.Args[1:]...).Start(); err == nil {
+				cx.Quit()
+				return
+			}
+		}
+		toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "重启失败", Description: "请手动重启应用"})
+		onClose()
+	}
+
+	restartLater := func() {
+		restartSig.Set(false)
 		onClose()
 	}
 
@@ -72,6 +98,22 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 		Padding: core.Symmetric(6, 8), CornerRadius: 6}
 
 	return core.View{Class: "absolute inset-0 bg-black/60 z-50 flex-row items-center justify-center", Children: []core.Node{
+		// Saving the port asks for a restart; the panel stays under it
+		// until answered.
+		ui.AlertDialog{
+			Open: restartSig.Get,
+			OnOpenChange: func(open bool, _ base.Reason) {
+				if !open {
+					restartLater()
+				}
+			},
+			Title:       "重启应用",
+			Description: "MCP 端口已保存，重启应用后生效。",
+			Actions: []ui.AlertAction{
+				{Text: "稍后", OnPress: restartLater},
+				{Text: "立即重启", Default: true, OnPress: restart},
+			},
+		},
 		core.View{Class: "w-[460px] rounded-xl bg-neutral-900 border border-neutral-700 p-5 gap-4 flex-col", Children: []core.Node{
 			core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
 				core.Text{Content: "设置", Style: core.Style{FontSize: 16}},

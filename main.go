@@ -5,12 +5,15 @@
 package main
 
 import (
+	"bufio"
 	_ "embed"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nsgo-dev/nsgo"
 	"github.com/nsgo-dev/nsgo/core"
@@ -25,6 +28,44 @@ import (
 
 //go:embed assets/IconWindows.png
 var trayIcon []byte
+
+// singleInstanceAddr is the local lock the GUI holds to stay a single
+// instance: the first process listens on it, later ones ask it (over the
+// same socket) to show the running window and exit.
+const singleInstanceAddr = "127.0.0.1:9396"
+
+// acquireSingleInstance holds the singleton lock. When another instance
+// already runs it pokes that instance to show its window and reports false.
+// activate is invoked (from a goroutine) whenever a later instance asks;
+// release frees the lock.
+func acquireSingleInstance(activate func()) (release func(), ok bool) {
+	ln, err := net.Listen("tcp", singleInstanceAddr)
+	if err != nil {
+		// Tell the running instance to come to the front.
+		if c, derr := net.DialTimeout("tcp", singleInstanceAddr, time.Second); derr == nil {
+			_ = c.SetDeadline(time.Now().Add(2 * time.Second))
+			_, _ = c.Write([]byte("show\n"))
+			_ = c.Close()
+		}
+		return nil, false
+	}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return // released or closing
+			}
+			go func() {
+				line, _ := bufio.NewReader(c).ReadString('\n')
+				_ = c.Close()
+				if strings.TrimSpace(line) == "show" {
+					activate()
+				}
+			}()
+		}
+	}()
+	return func() { _ = ln.Close() }, true
+}
 
 func main() {
 	// The search index lives next to the dataset in the cache dir; the
@@ -65,6 +106,19 @@ func main() {
 		}
 	}
 
+	// Only one GUI instance: a later start asks the running one to show its
+	// window and exits instead of launching a second copy.
+	activateCh := make(chan struct{}, 1)
+	releaseSingleton, first := acquireSingleInstance(func() {
+		select {
+		case activateCh <- struct{}{}:
+		default:
+		}
+	})
+	if !first {
+		return
+	}
+
 	// The GUI opens immediately with a splash; the integrity check and
 	// dataset open run in the background and call OnBooted (which starts
 	// the embedded MCP HTTP server with the opened dataset).
@@ -72,15 +126,23 @@ func main() {
 		win := desktop.OpenWindow(app, desktop.WindowOptions{
 			Title: "PixelIcon · 像素图标库", Width: 1280, Height: 800, Key: "main",
 		}, func(cx *core.Scope) core.Node {
-			return ui.Main(cx, &ui.Deps{Store: st, OnBooted: func(ds *npy.Dataset) {
-				go func() {
-					addr := fmt.Sprintf("127.0.0.1:%d", port)
-					if err := mcp.ServeHTTP(addr, st, ds); err != nil {
-						fmt.Fprintf(os.Stderr, "[MCP] %v\n", err)
-					}
-				}()
-			}})
+			return ui.Main(cx, &ui.Deps{Store: st, ReleaseSingleton: releaseSingleton,
+				OnBooted: func(ds *npy.Dataset) {
+					go func() {
+						addr := fmt.Sprintf("127.0.0.1:%d", port)
+						if err := mcp.ServeHTTP(addr, st, ds); err != nil {
+							fmt.Fprintf(os.Stderr, "[MCP] %v\n", err)
+						}
+					}()
+				}})
 		})
+
+		// A later instance asked us to come to the front.
+		go func() {
+			for range activateCh {
+				app.Post(win.Show)
+			}
+		}()
 
 		// Closing the window hides it to the tray instead of quitting, so the
 		// embedded MCP server keeps serving external clients; the tray menu
