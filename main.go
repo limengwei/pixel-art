@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/nsgo-dev/nsgo"
 	"github.com/nsgo-dev/nsgo/core"
@@ -28,6 +29,7 @@ func main() {
 	if err := os.MkdirAll(filepath.Dir(dataset.DBPath()), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "创建数据目录失败: %v\n", err)
 	}
+	os.Remove(dataset.PartialZipPath()) // clean a half download left by a killed run
 	st, err := store.Open(dataset.DBPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "打开数据库失败: %v\n", err)
@@ -36,12 +38,14 @@ func main() {
 	defer st.Close()
 
 	var ds *npy.Dataset
-	if dataset.Ready() {
+	if ok, problems := dataset.Check(); ok {
 		if d, err := npy.Open(dataset.Dir()); err == nil {
 			ds = d
 		} else {
 			fmt.Fprintf(os.Stderr, "[数据集] %v（仅影响图片显示与导出）\n", err)
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[数据集] 文件不完整：%s\n", strings.Join(problems, "；"))
 	}
 
 	if len(os.Args) > 1 && os.Args[1] == "--mcp" {

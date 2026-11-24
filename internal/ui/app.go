@@ -43,7 +43,18 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 	detailSig := core.NewSignal(cx, store.Icon{})
 	detailOpenSig := core.NewSignal(cx, false)
 	settingsOpenSig := core.NewSignal(cx, false)
-	welcomeSig := core.NewSignal(cx, !dataset.Ready() || st.TotalIcons() == 0) // incomplete data
+
+	// --- startup integrity check: files must match their fixed sizes and
+	// the index must hold every sprite; anything else opens the welcome
+	// page with what is broken.
+	filesOK, fileProblems := dataset.Check()
+	indexDone := st.TotalIcons()
+	indexOK := indexDone == dataset.ExpectedIcons
+	problems := fileProblems
+	if !indexOK {
+		problems = append(problems, fmt.Sprintf("搜索索引不完整（%d / %d）", indexDone, dataset.ExpectedIcons))
+	}
+	welcomeSig := core.NewSignal(cx, !(filesOK && indexOK))
 	sizeSig := core.NewSignal(cx, 128)
 	toaster := ui.NewToaster(cx)
 
@@ -172,7 +183,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 			return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
 		}},
 		core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
-			return welcomePanel(cx, welcomeState{st: st, onReady: onDatasetReady})
+			return welcomePanel(cx, welcomeState{st: st, problem: strings.Join(problems, "；"), onReady: onDatasetReady})
 		}},
 		ui.Toasts{Toaster: toaster},
 	}}

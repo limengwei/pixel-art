@@ -99,3 +99,35 @@ func TestExtractAtHoistsLooseFiles(t *testing.T) {
 		t.Error("tokens.npy should have been moved out of base")
 	}
 }
+
+func TestCheckDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// Empty dir: every essential file is missing.
+	ok, problems := checkDir(dir)
+	if ok || len(problems) != len(expectedFiles) {
+		t.Fatalf("empty dir: ok=%v problems=%v", ok, problems)
+	}
+
+	// Write every file with its exact expected size.
+	for name, size := range expectedFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, size), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ok, problems = checkDir(dir); !ok || len(problems) != 0 {
+		t.Fatalf("complete dir: ok=%v problems=%v", ok, problems)
+	}
+
+	// Truncate one file: a half download must be caught.
+	if err := os.Truncate(filepath.Join(dir, "tokens.npy"), 100<<20); err != nil {
+		t.Fatal(err)
+	}
+	ok, problems = checkDir(dir)
+	if ok || len(problems) != 1 || !strings.Contains(problems[0], "tokens.npy") {
+		t.Fatalf("truncated: ok=%v problems=%v", ok, problems)
+	}
+	if !strings.Contains(problems[0], "大小不符") {
+		t.Errorf("problem text = %q, want a size mismatch", problems[0])
+	}
+}

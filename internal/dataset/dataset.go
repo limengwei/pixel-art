@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -42,6 +43,49 @@ func DBPath() string {
 func Ready() bool {
 	fi, err := os.Stat(filepath.Join(Dir(), "tokens.npy"))
 	return err == nil && !fi.IsDir() && fi.Size() > 0
+}
+
+// ExpectedIcons is the dataset's fixed sprite count; a complete index
+// holds exactly this many icons.
+const ExpectedIcons = 1_409_404
+
+// expectedFiles are the essential dataset files with their exact sizes in
+// the fixed pixel-art-16x16-1.4m release. A size mismatch means an
+// interrupted download or extraction.
+var expectedFiles = map[string]int64{
+	"tokens.npy":    721_614_976,
+	"palette.npy":   12_419,
+	"captions.json": 62_447_463,
+	"objects.json":  21_605_555,
+	"split.npy":     1_409_532,
+}
+
+// Check validates the dataset files under Dir(): every essential file must
+// exist with its exact expected size. It reports each problem found; ok is
+// true when everything matches.
+func Check() (ok bool, problems []string) {
+	return checkDir(Dir())
+}
+
+func checkDir(dir string) (bool, []string) {
+	var problems []string
+	for name, want := range expectedFiles {
+		fi, err := os.Stat(filepath.Join(dir, name))
+		switch {
+		case err != nil:
+			problems = append(problems, fmt.Sprintf("%s 缺失", name))
+		case fi.Size() != want:
+			problems = append(problems, fmt.Sprintf("%s 大小不符（%.0f MB / %.0f MB，可能下载或解压中断）",
+				name, float64(fi.Size())/1e6, float64(want)/1e6))
+		}
+	}
+	sort.Strings(problems) // stable order for display
+	return len(problems) == 0, problems
+}
+
+// PartialZipPath is where an interrupted download leaves its half zip.
+func PartialZipPath() string {
+	return filepath.Join(filepath.Dir(Dir()), Name+".zip")
 }
 
 // Progress reports download or extraction advancement. Total is in bytes

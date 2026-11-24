@@ -24,9 +24,9 @@
 
 首次打开（或数据不完整）时会出现欢迎页，展示数据集横幅与介绍。点击「部署数据集」，应用会一键完成三步（仅需一次，数据集已存在时自动跳过前两步）：
 
-1. 从 Hugging Face 下载数据集压缩包（约 780 MB）
+1. 从 Hugging Face 下载数据集压缩包（约 253 MB，解压后约 770 MB）
 2. 自动解压到缓存目录
-3. 构建搜索索引（约 3–5 分钟）
+3. 构建搜索索引（约 3–5 分钟，索引约 211 MB）
 
 ```
 https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-art-16x16-1.4m.zip?download=true

@@ -35,6 +35,7 @@ var bannerRGBA = func() *image.RGBA {
 // welcomeState feeds the first-launch deploy overlay.
 type welcomeState struct {
 	st      *store.Store
+	problem string // integrity problems found at startup ("" = fresh)
 	onReady func() // data complete: reopen dataset, refresh and search
 }
 
@@ -67,8 +68,9 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 		}
 		stateSig.Set("running")
 		go func() {
-			// 1. Download + extract (skipped when the dataset is in place).
-			if !dataset.Ready() {
+			// 1. Download + extract (skipped when the files fully check out;
+			// a half-downloaded or half-extracted dataset is re-fetched).
+			if ok, _ := dataset.Check(); !ok {
 				post(deployProgress{phase: "下载", text: "准备下载…"})
 				if err := dataset.Download(context.Background(), func(p dataset.Progress) {
 					post(deployProgress{phase: p.Phase, text: progressText(p), frac: fracOf(p.Done, p.Total)})
@@ -77,7 +79,7 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 					return
 				}
 			}
-			// 2. Build the search index (idempotent).
+			// 2. Build the search index (idempotent; fills a half-built one).
 			if err := indexer.Run(dataset.Dir(), s.st, func(p indexer.Progress) {
 				post(deployProgress{phase: "构建索引", text: indexProgressText(p), frac: indexFrac(p)})
 			}); err != nil {
@@ -109,7 +111,16 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 
 			core.View{Class: "gap-1.5 flex-col items-center", Children: []core.Node{
 				core.Text{Content: "1,409,404 个 16×16 透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
-				core.Text{Content: "首次部署需下载数据集（约 780 MB，来自 Hugging Face，CC0 1.0）并构建搜索索引（约 3–5 分钟），仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
+				core.Text{Content: "首次部署需下载数据集（压缩包约 253 MB，来自 Hugging Face，CC0 1.0）并构建搜索索引（约 3–5 分钟），仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
+			}},
+
+			// integrity problems found at startup (half downloads, half
+			// built index), if any
+			core.Show{When: func() bool { return s.problem != "" }, Then: func(cx *core.Scope) core.Node {
+				return core.View{Class: "w-[560px] max-w-full rounded-lg border border-amber-800 bg-amber-950/40 px-3 py-2", Children: []core.Node{
+					core.Text{Content: "检测到数据不完整：", Style: core.Style{FontSize: 11, Color: core.RGB(0xfbbf24)}},
+					core.Text{Content: s.problem, Style: core.Style{FontSize: 11, Color: core.RGB(0xfbbf24)}},
+				}}
 			}},
 
 			// deploy button / progress / error
