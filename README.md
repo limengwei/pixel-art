@@ -1,4 +1,4 @@
-# PixelIcon · 像素图标库
+# pixel-art · 像素图标库
 
 基于 [Pixel Art Atlas](https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m) 数据集的像素图标浏览器与检索工具。140 万个 16×16 合成游戏精灵图，内置预构建的中文搜索索引，支持 MCP 协议供外部工具（如 IDE、AI 助手）直接检索和导出图标。
 
@@ -43,14 +43,14 @@ https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-a
 
 ## MCP 服务
 
-启动后自动在本机开启 MCP HTTP 服务（默认端口 9394，工具栏「MCP」按钮打开设置页，可查看/复制接入地址、客户端 JSON 配置与工具文档，端口可修改、重启生效），另可用 `pixelicon.exe --mcp` 以 stdio 模式运行。提供图标搜索与导出工具，供支持 MCP 的客户端接入。
+启动后自动在本机开启 MCP HTTP 服务（默认端口 9394，工具栏「MCP」按钮打开设置页，可查看/复制接入地址、客户端 JSON 配置与工具文档，端口可修改、重启生效），另可用 `pixel-art.exe --mcp` 以 stdio 模式运行。提供图标搜索与导出工具，供支持 MCP 的客户端接入。
 
 **关闭主窗口不会退出程序**：应用最小化到系统托盘继续提供 MCP 服务，单击托盘图标恢复窗口，托盘右键菜单可选择「显示窗口」或「退出」。
 
 ## 构建与开发
 
 ```bash
-go build -trimpath -ldflags "-s -w" -o pixelicon.exe .
+go build -trimpath -ldflags "-s -w" -o pixel-art.exe .
 go test ./internal/...
 ```
 

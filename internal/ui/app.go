@@ -1,4 +1,4 @@
-// Package ui builds the PixelIcon desktop interface with NSGo.
+// Package ui builds the pixel-art desktop interface with NSGo.
 package ui
 
 import (
@@ -231,7 +231,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 func splashPanel() core.Node {
 	return core.View{Class: "w-full h-full flex-col items-center justify-center gap-4 bg-neutral-950", Children: []core.Node{
 		ui.ProgressRing{Indeterminate: func() bool { return true }, Size: 40},
-		core.Text{Content: "正在启动 PixelIcon…", Style: core.Style{FontSize: 14}},
+		core.Text{Content: "正在启动 pixel-art…", Style: core.Style{FontSize: 14}},
 		core.Text{Content: "校验数据完整性并加载数据集（约 3 秒）", Style: core.Style{FontSize: 11, Color: core.RGB(0x737373)}},
 	}}
 }

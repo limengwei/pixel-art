@@ -1,9 +1,9 @@
-# PixelIcon 的 nsgo 工具配置（go tool nsgo dev / build 使用；
+# pixel-art 的 nsgo 工具配置（go tool nsgo dev / build 使用；
 # 纯 go build 会忽略此文件，图标由 rsrc_windows_amd64.syso 嵌入）。
-name: PixelIcon
-id: dev.mindspace.pixelicon
+name: pixel-art
+id: dev.mindspace.pixel-art
 version: 1.1.0
-copyright: © 2026 PixelIcon
+copyright: © 2026 pixel-art
 appearance: dark
 
 icon:

@@ -27,7 +27,7 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, open *core.S
 	restartSig := core.NewSignal(cx, false)
 
 	mcpAddr := fmt.Sprintf("http://127.0.0.1:%d/mcp", effective)
-	mcpConfig := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"pixelicon\": {\n      \"url\": \"%s\"\n    }\n  }\n}", mcpAddr)
+	mcpConfig := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"pixel-art\": {\n      \"url\": \"%s\"\n    }\n  }\n}", mcpAddr)
 
 	// copyChip renders a small pressable chip that copies src to the
 	// clipboard and toasts about it.
@@ -191,7 +191,7 @@ func mcpConfigLines(addr string) []core.Node {
 	lines := []string{
 		"{",
 		`  "mcpServers": {`,
-		`    "pixelicon": {`,
+		`    "pixel-art": {`,
 		fmt.Sprintf(`      "url": "%s"`, addr),
 		"    }",
 		"  }",

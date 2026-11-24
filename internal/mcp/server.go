@@ -22,7 +22,7 @@ import (
 // New builds the MCP server with all tools registered. ds may be nil, in
 // which case export_icon reports the dataset as unavailable.
 func New(st *store.Store, ds *npy.Dataset) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "pixelicon", Version: "1.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "pixel-art", Version: "1.1.0"}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_icons",
@@ -207,7 +207,7 @@ func ServeHTTP(addr string, st *store.Store, ds *npy.Dataset) error {
 func ServeStdio(st *store.Store, ds *npy.Dataset) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	fmt.Fprintf(os.Stderr, "PixelIcon MCP (stdio): %d icons indexed\n", st.TotalIcons())
+	fmt.Fprintf(os.Stderr, "pixel-art MCP (stdio): %d icons indexed\n", st.TotalIcons())
 	return New(st, ds).Run(ctx, &mcp.StdioTransport{})
 }
 

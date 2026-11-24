@@ -103,7 +103,7 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 		OnOpenChange:           func(open bool, _ base.Reason) {},
 		NoCloseOnEscape:        true,
 		NoCloseOnBackdropPress: true,
-		Title:                  "欢迎来到 PixelIcon · 像素图标库",
+		Title:                  "欢迎来到 pixel-art · 像素图标库",
 		Style:                  core.Style{MaxWidth: core.Pct(90)},
 
 		Children: []core.Node{

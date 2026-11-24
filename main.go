@@ -1,4 +1,4 @@
-// Command pixelart is PixelIcon: a pixel-art icon browser over the Pixel
+// Command pixelart is pixel-art: a pixel-art icon browser over the Pixel
 // Art Atlas dataset (tokens.npy rendered on demand, search index built by
 // the first-launch deploy), with an embedded MCP server for searching and
 // exporting icons. Run with --mcp for a standalone stdio MCP server.
@@ -129,7 +129,7 @@ func main() {
 	// the embedded MCP HTTP server with the opened dataset).
 	nsgo.Run(func(app *core.Scope) {
 		win := desktop.OpenWindow(app, desktop.WindowOptions{
-			Title: "PixelIcon · 像素图标库", Width: 1280, Height: 800, Key: "main",
+			Title: "pixel-art · 像素图标库", Width: 1280, Height: 800, Key: "main",
 		}, func(cx *core.Scope) core.Node {
 			return ui.Main(cx, &ui.Deps{Store: st, ReleaseSingleton: releaseSingleton,
 				OnBooted: func(ds *npy.Dataset) {
@@ -151,7 +151,7 @@ func main() {
 		})
 		desktop.NewTray(app, desktop.TrayOptions{
 			Icon:    trayIcon,
-			Tooltip: fmt.Sprintf("PixelIcon · 像素图标库 · MCP :%d", port),
+			Tooltip: fmt.Sprintf("pixel-art · 像素图标库 · MCP :%d", port),
 			OnClick: win.Show,
 			Menu: func() []core.MenuItem {
 				return []core.MenuItem{
