@@ -140,11 +140,14 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 				}}
 			}},
 			core.Show{When: func() bool { return stateSig.Get() == "running" }, Then: func(cx *core.Scope) core.Node {
-				p := progSig.Get()
 				return core.View{Class: "w-[480px] max-w-full gap-2 flex-col items-center", Children: []core.Node{
-					core.Text{Content: p.text, Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3)}},
-					ui.Progress{Value: func() float32 { return progSig.Get().frac },
-						Indeterminate: func() bool { return progSig.Get().frac <= 0 }},
+					core.Text{ContentFunc: func() string { return progSig.Get().text },
+						Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3)}},
+					// ui.Progress takes a 0..100 percentage (base.Progress
+					// clamps), so scale the 0..1 fraction.
+					ui.Progress{Value: func() float32 { return progSig.Get().frac * 100 },
+						Indeterminate: func() bool { return progSig.Get().frac <= 0 },
+						Style:         core.Style{Width: core.Pct(100)}},
 				}}
 			}},
 
