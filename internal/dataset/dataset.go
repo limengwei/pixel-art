@@ -7,6 +7,9 @@ package dataset
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,32 +58,88 @@ const ExpectedIcons = 1_409_404
 var expectedFiles = map[string]int64{
 	"tokens.npy":    721_614_976,
 	"palette.npy":   12_419,
-	"captions.json": 62_447_463,
+	"captions.json": 62_447_413,
 	"objects.json":  21_605_555,
 	"split.npy":     1_409_532,
 }
 
-// Check validates the dataset files under Dir(): every essential file must
-// exist with its exact expected size. It reports each problem found; ok is
-// true when everything matches.
+// ManifestName is the SHA-256 manifest written into the dataset dir after
+// a successful deploy; startup verification hashes files against it.
+const ManifestName = "manifest.json"
+
+// Check validates the dataset files under Dir() in two layers: exact size
+// first, then — when a deploy left a hash manifest — file content. It
+// reports each problem found; ok is true when everything matches.
 func Check() (ok bool, problems []string) {
 	return checkDir(Dir())
 }
 
 func checkDir(dir string) (bool, []string) {
+	var m map[string]string
+	if b, err := os.ReadFile(filepath.Join(dir, ManifestName)); err == nil {
+		var mm map[string]string
+		if json.Unmarshal(b, &mm) == nil {
+			m = mm
+		}
+	}
 	var problems []string
 	for name, want := range expectedFiles {
-		fi, err := os.Stat(filepath.Join(dir, name))
+		path := filepath.Join(dir, name)
+		fi, err := os.Stat(path)
 		switch {
 		case err != nil:
 			problems = append(problems, fmt.Sprintf("%s 缺失", name))
 		case fi.Size() != want:
-			problems = append(problems, fmt.Sprintf("%s 大小不符（%.0f MB / %.0f MB，可能下载或解压中断）",
-				name, float64(fi.Size())/1e6, float64(want)/1e6))
+			problems = append(problems, fmt.Sprintf("%s 大小不符（%d / %d 字节，可能下载或解压中断）",
+				name, fi.Size(), want))
+		default:
+			// Size matches; verify content when a manifest exists.
+			if wantHash, ok := m[name]; ok {
+				if h, err := sha256File(path); err == nil && h != wantHash {
+					problems = append(problems, fmt.Sprintf("%s 内容校验失败（哈希不符，可能磁盘损坏）", name))
+				}
+			}
 		}
 	}
 	sort.Strings(problems) // stable order for display
 	return len(problems) == 0, problems
+}
+
+// WriteManifest hashes every essential dataset file (SHA-256) and stores
+// the manifest inside the dataset dir. Called after a deploy completes so
+// later startups can verify content, not just size.
+func WriteManifest() error {
+	return writeManifest(Dir())
+}
+
+func writeManifest(dir string) error {
+	m := make(map[string]string, len(expectedFiles))
+	for name := range expectedFiles {
+		h, err := sha256File(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		m[name] = h
+	}
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, ManifestName), b, 0o644)
+}
+
+// sha256File hashes a file streamingly.
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // PartialZipPath is where an interrupted download leaves its half zip.

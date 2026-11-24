@@ -131,3 +131,42 @@ func TestCheckDir(t *testing.T) {
 		t.Errorf("problem text = %q, want a size mismatch", problems[0])
 	}
 }
+
+func TestCheckDirHashLayer(t *testing.T) {
+	dir := t.TempDir()
+	for name, size := range expectedFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, size), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Without a manifest, size-only verification passes.
+	if ok, problems := checkDir(dir); !ok {
+		t.Fatalf("size-only: ok=%v problems=%v", ok, problems)
+	}
+
+	// With a manifest, intact files still pass.
+	if err := writeManifest(dir); err != nil {
+		t.Fatal(err)
+	}
+	if ok, problems := checkDir(dir); !ok {
+		t.Fatalf("with manifest: ok=%v problems=%v", ok, problems)
+	}
+
+	// Corrupt content without changing the size: only the hash catches it.
+	p := filepath.Join(dir, "palette.npy")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[0] ^= 0xff
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, problems := checkDir(dir)
+	if ok || len(problems) != 1 || !strings.Contains(problems[0], "palette.npy") {
+		t.Fatalf("corrupted: ok=%v problems=%v", ok, problems)
+	}
+	if !strings.Contains(problems[0], "哈希不符") {
+		t.Errorf("problem text = %q, want a hash mismatch", problems[0])
+	}
+}

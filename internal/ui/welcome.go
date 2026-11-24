@@ -86,6 +86,9 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 				fail(err)
 				return
 			}
+			// 3. Persist file hashes so later startups verify content, not
+			// just size. Failure only downgrades to size-only verification.
+			_ = dataset.WriteManifest()
 			cx.Post(func() { s.onReady() })
 		}()
 	}
