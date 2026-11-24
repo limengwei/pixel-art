@@ -7,7 +7,7 @@
 <p align="center"><a href="README.md">English</a> | 中文</p>
 
 <p align="center">
-基于 <a href="https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m">Pixel Art Atlas</a> 数据集的像素图标浏览器与检索工具——140 万个 16×16 游戏精灵图。<br>
+基于 <a href="https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m">Pixel Art Atlas</a> 数据集的像素图标浏览器与检索工具——140 万个游戏精灵图。<br>
 内置中英文全文搜索索引，集成 MCP 服务器可接入 AI 助手使用。
 </p>
 
@@ -43,7 +43,7 @@
 
 应用仅支持这一个数据集：
 
-- 1,409,404 个 16×16 透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述
+- 1,409,404 个透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述
 - 图像由 Krea 2 Turbo 与像素画 LoRA 从文本提示生成，以 CC0 1.0 协议发布
 - `tokens.npy` 存储 256 个调色板索引（行主序），索引 0 为透明，其余索引从 `palette.npy` 取 RGB 颜色
 - 描述为生成时的提示词，与图像内容大致对应但不完全精确（颜色、数量、细节可能有出入），使用时请以图像为准
@@ -81,7 +81,7 @@ https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-a
 | 工具 | 说明 |
 |------|------|
 | `search_icons` | 按中文或英文关键词搜索像素图标（匹配主体、英文描述与中文标签），支持主体过滤与分页，返回 `id`、`subject`、`caption` |
-| `get_icon` | 按 id 获取图标详情：主体、完整描述、原始 16×16 尺寸与数据集行号 |
+| `get_icon` | 按 id 获取图标详情：主体、完整描述、原始尺寸与数据集行号 |
 | `export_icon` | 导出图标为 PNG 文件（从数据集按需渲染，最近邻采样保持像素锐利），可指定尺寸与输出目录，返回导出文件绝对路径 |
 
 ### 客户端配置
