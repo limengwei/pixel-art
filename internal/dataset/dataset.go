@@ -105,6 +105,13 @@ func checkDir(dir string) (bool, []string) {
 	return len(problems) == 0, problems
 }
 
+// HasManifest reports whether a deploy (or a startup backfill) already
+// wrote the hash manifest.
+func HasManifest() bool {
+	fi, err := os.Stat(filepath.Join(Dir(), ManifestName))
+	return err == nil && !fi.IsDir()
+}
+
 // WriteManifest hashes every essential dataset file (SHA-256) and stores
 // the manifest inside the dataset dir. Called after a deploy completes so
 // later startups can verify content, not just size.

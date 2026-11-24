@@ -39,7 +39,7 @@ https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-a
 | 搜索索引（部署时构建） | `%LocalAppData%\pixelart\icons.db` |
 | 数据集目录 | `%LocalAppData%\pixelart\pixel-art-16x16-1.4m\` |
 
-应用不再支持其他数据集目录。若索引或数据集缺失，启动时会重新检测并展示欢迎页，重新点「部署数据集」即可修复（重建索引是幂等的）。
+应用不再支持其他数据集目录。若索引或数据集缺失，启动时会重新检测并展示欢迎页，重新点「部署数据集」即可修复（重建索引是幂等的）。部署完成后会生成 `manifest.json`（SHA-256 清单）用于后续启动的内容校验；老版本部署的数据在下次启动通过大小校验后会自动补生成。
 
 ## MCP 服务
 

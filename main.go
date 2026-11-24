@@ -44,6 +44,12 @@ func main() {
 		} else {
 			fmt.Fprintf(os.Stderr, "[数据集] %v（仅影响图片显示与导出）\n", err)
 		}
+		// Backfill: installs deployed before hash manifests existed pass the
+		// size check without one — write it in the background (~3s) so the
+		// next startup verifies content too.
+		if !dataset.HasManifest() {
+			go func() { _ = dataset.WriteManifest() }()
+		}
 	} else {
 		fmt.Fprintf(os.Stderr, "[数据集] 文件不完整：%s\n", strings.Join(problems, "；"))
 	}
