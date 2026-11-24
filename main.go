@@ -1,12 +1,13 @@
 // Command pixelart is PixelIcon: a pixel-art icon browser over the Pixel
-// Art Atlas dataset (tokens.npy rendered on demand, a prebuilt search
-// index embedded in the binary), with an embedded MCP server for searching
-// and exporting icons. Run with --mcp for a standalone stdio MCP server.
+// Art Atlas dataset (tokens.npy rendered on demand, search index built by
+// the first-launch deploy), with an embedded MCP server for searching and
+// exporting icons. Run with --mcp for a standalone stdio MCP server.
 package main
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/nsgo-dev/nsgo"
@@ -14,7 +15,6 @@ import (
 	"github.com/nsgo-dev/nsgo/desktop"
 
 	"pixelart/internal/dataset"
-	"pixelart/internal/index"
 	"pixelart/internal/mcp"
 	"pixelart/internal/npy"
 	"pixelart/internal/store"
@@ -22,21 +22,19 @@ import (
 )
 
 func main() {
-	// The search index ships inside the binary; extract it once.
-	dbPath, err := index.Ensure()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "初始化内置索引失败: %v\n", err)
-		os.Exit(1)
+	// The search index lives next to the dataset in the cache dir; the
+	// first-launch welcome screen offers a one-click deploy that downloads
+	// the dataset and builds the index.
+	if err := os.MkdirAll(filepath.Dir(dataset.DBPath()), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "创建数据目录失败: %v\n", err)
 	}
-	st, err := store.Open(dbPath)
+	st, err := store.Open(dataset.DBPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "打开数据库失败: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
 
-	// The dataset (pixel-art-16x16-1.4m) lives in a fixed cache directory;
-	// the first-launch welcome screen offers to download it.
 	var ds *npy.Dataset
 	if dataset.Ready() {
 		if d, err := npy.Open(dataset.Dir()); err == nil {

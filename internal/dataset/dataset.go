@@ -29,6 +29,15 @@ func Dir() string {
 	return Name
 }
 
+// DBPath returns the search index database location under the user cache
+// dir. The database is built by the welcome page's deploy step.
+func DBPath() string {
+	if base, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(base, "pixelart", "icons.db")
+	}
+	return "icons.db"
+}
+
 // Ready reports whether the dataset's tokens.npy is present.
 func Ready() bool {
 	fi, err := os.Stat(filepath.Join(Dir(), "tokens.npy"))
