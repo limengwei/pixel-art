@@ -66,6 +66,10 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 	// ever holding it in memory.
 	var pager *iconPager
 
+	// gridRef is the icon list's scroll handle, so a new result set can
+	// scroll it back to the top.
+	gridRef := &core.Ref{}
+
 	// --- sprite decoding (on demand, cached inside the dataset) ---
 	spriteOf := func(id int64) *image.RGBA {
 		if ds == nil {
@@ -94,6 +98,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 				pager = p
 				totalSig.Set(p.total)
 				refreshSig.Set(refreshSig.Get() + 1)
+				gridRef.ScrollToIndexAt(0, 0, 0, false) // back to the top
 			})
 		}()
 	}
@@ -189,6 +194,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 					iconGrid(cx, gridState{
 						total:   totalSig,
 						refresh: refreshSig,
+						ref:     gridRef,
 						row: func(i int) (store.Icon, bool) {
 							if pager == nil {
 								return store.Icon{}, false

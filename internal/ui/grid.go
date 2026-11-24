@@ -62,6 +62,7 @@ const maxGridRows = 100_000
 type gridState struct {
 	total    *core.Signal[int] // size of the whole result set
 	refresh  *core.Signal[int] // bumped when a page arrives
+	ref      *core.Ref         // the list's scroll handle
 	row      func(i int) (store.Icon, bool)
 	ensure   func(page int)
 	onOpen   func(store.Icon)
@@ -114,6 +115,7 @@ func iconGrid(cx *core.Scope, s gridState) core.Node {
 		Columns:       10,
 		EstimatedSize: cellSize + 12,
 		Gap:           8,
+		Ref:           s.ref,
 		ListStyle:     core.Style{Padding: core.All(12)},
 		// The outer view must be flex-bounded or base.List grows to its
 		// content height and the list virtualizes every row.
