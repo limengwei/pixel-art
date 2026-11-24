@@ -18,7 +18,7 @@ import (
 // MCP HTTP port, plus the MCP service's address, client config and tool
 // documentation. The search index and dataset live in fixed cache
 // locations, so neither is configurable.
-func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func()) core.Node {
+func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, open *core.Signal[bool]) core.Node {
 	st := deps.Store
 	// The port the running server answers on; a saved change only takes
 	// effect after a restart, so it stays what the app started with.
@@ -83,12 +83,12 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 			}
 		}
 		toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "重启失败", Description: "请手动重启应用"})
-		onClose()
+		open.Set(false)
 	}
 
 	restartLater := func() {
 		restartSig.Set(false)
-		onClose()
+		open.Set(false)
 	}
 
 	labelStyle := core.Style{FontSize: 11, Color: core.RGB(0xa3a3a3)}
@@ -96,7 +96,9 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 		Color: core.RGB(0xe5e5e5), Background: core.RGB(0x18181b),
 		Padding: core.Symmetric(6, 8), CornerRadius: 6}
 
-	return core.View{Class: "absolute inset-0 bg-black/60 z-50 flex-row items-center justify-center", Children: []core.Node{
+	// ui.Dialog rides the driver's modal layer, which blocks input to the
+	// app behind it — a hand-rolled absolute overlay lets clicks through.
+	return core.View{Children: []core.Node{
 		// Saving the port asks for a restart; the panel stays under it
 		// until answered.
 		ui.AlertDialog{
@@ -113,68 +115,73 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 				{Text: "立即重启", Default: true, OnPress: restart},
 			},
 		},
-		core.View{Class: "w-[460px] rounded-xl bg-neutral-900 border border-neutral-700 p-5 gap-4 flex-col", Children: []core.Node{
-			core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
-				core.Text{Content: "设置", Style: core.Style{FontSize: 16}},
-				ui.Button{Text: "关闭", OnPress: onClose},
-			}},
+		ui.Dialog{
+			Open: open.Get,
+			OnOpenChange: func(o bool, _ base.Reason) {
+				if !o {
+					open.Set(false)
+				}
+			},
+			Title: "设置",
 
-			// core.Scroll with HideIndicator: the overlay scrollbar would
+			// core.Scroll with HideIndicator: the dialog scrollbar would
 			// cover the copy chips at the rows' right edge.
-			core.Scroll{
-				HideIndicator: true,
-				Style:         core.Style{Width: core.Pct(100), MinHeight: core.Pt(0), MaxHeight: core.Pt(520), Gap: 16},
-				Children: []core.Node{
-					// MCP port.
-					core.View{Class: "gap-1 flex-col", Children: []core.Node{
-						core.Text{Content: "MCP HTTP 端口", Style: labelStyle},
-						ui.Input{Value: portSig.Get, OnChange: portSig.Set, Style: core.Style{FontSize: 12}},
-						core.Show{When: func() bool { return !portValid() }, Then: func(cx *core.Scope) core.Node {
-							return core.Text{Content: "端口须为 1–65535 的整数", Style: core.Style{FontSize: 10, Color: core.RGB(0xf87171)}}
-						}},
-						core.Text{Content: fmt.Sprintf("当前生效端口：%d（重启应用后切换）", effective),
-							Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-					}},
-
-					// MCP service: address and client config (both copyable),
-					// plus the tool docs.
-					core.View{Class: "gap-2 flex-col pt-3 border-t border-neutral-800", Children: []core.Node{
-						core.Text{Content: "MCP 服务（随应用自动启动，关闭窗口后托盘常驻）", Style: core.Style{FontSize: 12}},
+			Children: []core.Node{
+				core.Scroll{
+					HideIndicator: true,
+					Style:         core.Style{Width: core.Pct(100), MinHeight: core.Pt(0), MaxHeight: core.Pt(520), Gap: 16},
+					Children: []core.Node{
+						// MCP port.
 						core.View{Class: "gap-1 flex-col", Children: []core.Node{
-							core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
-								core.Text{Content: "HTTP 地址", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-								copyChip("复制", func() string { return mcpAddr }),
+							core.Text{Content: "MCP HTTP 端口", Style: labelStyle},
+							ui.Input{Value: portSig.Get, OnChange: portSig.Set, Style: core.Style{FontSize: 12}},
+							core.Show{When: func() bool { return !portValid() }, Then: func(cx *core.Scope) core.Node {
+								return core.Text{Content: "端口须为 1–65535 的整数", Style: core.Style{FontSize: 10, Color: core.RGB(0xf87171)}}
 							}},
-							core.Text{Content: mcpAddr, Style: monoValue},
+							core.Text{Content: fmt.Sprintf("当前生效端口：%d（重启应用后切换）", effective),
+								Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
 						}},
-						core.View{Class: "gap-1 flex-col", Children: []core.Node{
-							core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
-								core.Text{Content: "MCP 配置", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-								copyChip("复制", func() string { return mcpConfig }),
-							}},
-							core.View{Style: core.Style{Background: core.RGB(0x18181b), Padding: core.All(8), CornerRadius: 6},
-								Children: mcpConfigLines(mcpAddr)},
-						}},
-						core.Text{Content: "可用方法", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-						core.View{Class: "gap-2 flex-col", Children: toolDocs()},
-					}},
 
-					// Read-only app information.
-					core.View{Class: "gap-2 flex-col pt-3 border-t border-neutral-800", Children: []core.Node{
-						core.Text{Content: fmt.Sprintf("图标总数：%d · 分类数：%d", st.TotalIcons(), len(st.Subjects())), Style: labelStyle},
-						core.View{Class: "gap-1 flex-col", Children: []core.Node{
-							core.Text{Content: "数据来源", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-							core.Text{Content: "https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+						// MCP service: address and client config (both copyable),
+						// plus the tool docs.
+						core.View{Class: "gap-2 flex-col pt-3 border-t border-neutral-800", Children: []core.Node{
+							core.Text{Content: "MCP 服务（随应用自动启动，关闭窗口后托盘常驻）", Style: core.Style{FontSize: 12}},
+							core.View{Class: "gap-1 flex-col", Children: []core.Node{
+								core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
+									core.Text{Content: "HTTP 地址", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+									copyChip("复制", func() string { return mcpAddr }),
+								}},
+								core.Text{Content: mcpAddr, Style: monoValue},
+							}},
+							core.View{Class: "gap-1 flex-col", Children: []core.Node{
+								core.View{Class: "flex-row items-center justify-between", Children: []core.Node{
+									core.Text{Content: "MCP 配置", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+									copyChip("复制", func() string { return mcpConfig }),
+								}},
+								core.View{Style: core.Style{Background: core.RGB(0x18181b), Padding: core.All(8), CornerRadius: 6},
+									Children: mcpConfigLines(mcpAddr)},
+							}},
+							core.Text{Content: "可用方法", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+							core.View{Class: "gap-2 flex-col", Children: toolDocs()},
 						}},
-					}},
+
+						// Read-only app information.
+						core.View{Class: "gap-2 flex-col pt-3 border-t border-neutral-800", Children: []core.Node{
+							core.Text{Content: fmt.Sprintf("图标总数：%d · 分类数：%d", st.TotalIcons(), len(st.Subjects())), Style: labelStyle},
+							core.View{Class: "gap-1 flex-col", Children: []core.Node{
+								core.Text{Content: "数据来源", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+								core.Text{Content: "https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+							}},
+						}},
+					},
 				},
 			},
 
-			core.View{Class: "flex-row justify-end gap-2", Children: []core.Node{
-				ui.Button{Text: "取消", OnPress: onClose},
+			Footer: []core.Node{
+				ui.Button{Text: "取消", OnPress: func() { open.Set(false) }},
 				ui.Button{Text: "保存", Disabled: func() bool { return !portValid() }, OnPress: save},
-			}},
-		}},
+			},
+		},
 	}}
 }
 

@@ -51,7 +51,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 	detailSig := core.NewSignal(cx, store.Icon{})
 	detailOpenSig := core.NewSignal(cx, false)
 	settingsOpenSig := core.NewSignal(cx, false)
-	bootSig := core.NewSignal(cx, false)   // splash until true
+	bootSig := core.NewSignal(cx, false)    // splash until true
 	welcomeSig := core.NewSignal(cx, false) // incomplete data after boot
 	problemSig := core.NewSignal(cx, "")
 	sizeSig := core.NewSignal(cx, 128)
@@ -218,11 +218,9 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 					})
 				}},
 				core.Show{When: settingsOpenSig.Get, Then: func(cx *core.Scope) core.Node {
-					return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
+					return settingsPanel(cx, deps, toaster, settingsOpenSig)
 				}},
-				core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
-					return welcomePanel(cx, welcomeState{st: st, problem: problemSig.Get(), onReady: onDatasetReady})
-				}},
+				welcomePanel(cx, welcomeState{st: st, problem: problemSig.Get(), open: welcomeSig, onReady: onDatasetReady}),
 			}}
 		}},
 		ui.Toasts{Toaster: toaster},

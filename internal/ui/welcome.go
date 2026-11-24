@@ -9,6 +9,7 @@ import (
 	"image/draw"
 	"image/png"
 
+	"github.com/nsgo-dev/nsgo/base"
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/ui"
 
@@ -35,8 +36,9 @@ var bannerRGBA = func() *image.RGBA {
 // welcomeState feeds the first-launch deploy overlay.
 type welcomeState struct {
 	st      *store.Store
-	problem string // integrity problems found at startup ("" = fresh)
-	onReady func() // data complete: reopen dataset, refresh and search
+	problem string             // integrity problems found at startup ("" = fresh)
+	open    *core.Signal[bool] // dialog visibility
+	onReady func()             // data complete: reopen dataset, refresh and search
 }
 
 // deployProgress is one step of the deploy pipeline (download → extract →
@@ -93,9 +95,18 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 		}()
 	}
 
-	return core.View{Class: "absolute inset-0 bg-neutral-950 z-40 flex-col items-center justify-center gap-5 p-6", Children: []core.Node{
-		core.View{Class: "w-[720px] max-w-full rounded-2xl border border-neutral-800 bg-neutral-900 p-6 gap-5 flex-col items-center", Children: []core.Node{
+	// ui.Dialog rides the driver's modal layer, which blocks input to the
+	// app behind it — a hand-rolled absolute overlay lets clicks through.
+	// The welcome cannot be dismissed: deploying is the only way on.
+	return ui.Dialog{
+		Open:                   s.open.Get,
+		OnOpenChange:           func(open bool, _ base.Reason) {},
+		NoCloseOnEscape:        true,
+		NoCloseOnBackdropPress: true,
+		Title:                  "欢迎来到 PixelIcon · 像素图标库",
+		Style:                  core.Style{MaxWidth: core.Pct(90)},
 
+		Children: []core.Node{
 			// banner
 			core.Image{
 				SourceFunc: func() core.ImageSource {
@@ -109,8 +120,6 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 				ResizeMode: core.Contain,
 				Style:      core.Style{Width: core.Pct(100)},
 			},
-
-			core.Text{Content: "欢迎来到 PixelIcon · 像素图标库", Style: core.Style{FontSize: 20}},
 
 			core.View{Class: "gap-1.5 flex-col items-center", Children: []core.Node{
 				core.Text{Content: "1,409,404 个 16×16 透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
@@ -155,8 +164,8 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 			}},
 
 			core.Text{Content: fmt.Sprintf("缓存位置：%s", dataset.Dir()), Style: core.Style{FontSize: 10, Color: core.RGB(0x525252)}},
-		}},
-	}}
+		},
+	}
 }
 
 // indexProgressText renders an indexer.Progress line. The metadata phase
