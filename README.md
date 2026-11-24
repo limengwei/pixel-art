@@ -22,20 +22,24 @@
 
 ## 首次启动
 
-首次打开时会出现欢迎页，展示数据集横幅与介绍。点击「下载数据集（约 780 MB）」，应用会从 Hugging Face 下载数据集压缩包到缓存目录并自动解压，全程仅需一次：
+首次打开（或数据不完整）时会出现欢迎页，展示数据集横幅与介绍。点击「部署数据集」，应用会一键完成三步（仅需一次，数据集已存在时自动跳过前两步）：
+
+1. 从 Hugging Face 下载数据集压缩包（约 780 MB）
+2. 自动解压到缓存目录
+3. 构建搜索索引（约 3–5 分钟）
 
 ```
 https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-art-16x16-1.4m.zip?download=true
 ```
 
-下载完成后即可正常浏览。数据集与索引的固定位置：
+部署完成后即可正常浏览。数据集与索引的固定位置：
 
 | 内容 | 路径（Windows） |
 | --- | --- |
-| 搜索索引（内置，首次启动自动解压） | `%LocalAppData%\pixelart\icons.db` |
+| 搜索索引（部署时构建） | `%LocalAppData%\pixelart\icons.db` |
 | 数据集目录 | `%LocalAppData%\pixelart\pixel-art-16x16-1.4m\` |
 
-应用不再支持其他数据集目录，也无需（也不能）手动重建索引——搜索索引已固化并内置于程序中。
+应用不再支持其他数据集目录。若索引或数据集缺失，启动时会重新检测并展示欢迎页，重新点「部署数据集」即可修复（重建索引是幂等的）。
 
 ## MCP 服务
 
@@ -48,13 +52,9 @@ go build -trimpath -ldflags "-s -w" -o pixelicon.exe .
 go test ./internal/...
 ```
 
-### 更新内置索引
+### 重建索引
 
-搜索索引由 `internal/indexer` 从数据集的 `captions.json` / `objects.json` 构建后压缩内置：
-
-1. 修改 `internal/indexer` 中数据集路径，运行构建得到新的 `icons.db`
-2. 压缩为 `internal/index/icons.db.gz`（gzip）
-3. 重新编译；首次启动会自动解压到缓存目录（删除缓存中的 `icons.db.ok` 可强制重新解压）
+搜索索引由 `internal/indexer` 从数据集的 `captions.json` / `objects.json` 构建（INSERT OR REPLACE，幂等可重跑）。删除缓存中的 `icons.db` 后重启应用，欢迎页会引导重新部署；也可以在测试中直接调用 `indexer.Run` 构建到指定数据库。
 
 ## 许可
 
