@@ -18,8 +18,10 @@ import (
 
 // Deps carries what the UI needs from main.
 type Deps struct {
-	Store   *store.Store
-	Dataset *npy.Dataset // may be nil until the first-run download finishes
+	Store *store.Store
+	// OnBooted runs once the background boot finished, with the dataset
+	// it opened (nil when the files failed their integrity check).
+	OnBooted func(*npy.Dataset)
 }
 
 // pageSize is how many icons one background page fetch loads.
@@ -28,39 +30,33 @@ const pageSize = 200
 // cellSize is one grid cell's icon box.
 const cellSize = 76
 
-// Main renders the whole app window content.
+// Main renders the whole app window content. The window opens instantly
+// with a splash; the integrity check (which hashes the dataset when a
+// manifest exists) and the dataset open run in the background and flip the
+// UI to the browser once done.
 func Main(cx *core.Scope, deps *Deps) core.Node {
 	st := deps.Store
 
-	// --- state ---
+	// --- state (filled by the boot goroutine below) ---
 	querySig := core.NewSignal(cx, "")
 	subjectSig := core.NewSignal(cx, "") // "" = all subjects
 	filterSig := core.NewSignal(cx, "")  // sidebar subject filter
 	totalSig := core.NewSignal(cx, 0)
 	refreshSig := core.NewSignal(cx, 0) // bumped when a page arrives
-	subjectsSig := core.NewSignalFunc(cx, st.Subjects(), nil)
-	allCountSig := core.NewSignal(cx, st.TotalIcons())
+	subjectsSig := core.NewSignalFunc(cx, []store.Subject(nil), nil)
+	allCountSig := core.NewSignal(cx, 0)
 	detailSig := core.NewSignal(cx, store.Icon{})
 	detailOpenSig := core.NewSignal(cx, false)
 	settingsOpenSig := core.NewSignal(cx, false)
-
-	// --- startup integrity check: files must match their fixed sizes and
-	// the index must hold every sprite; anything else opens the welcome
-	// page with what is broken.
-	filesOK, fileProblems := dataset.Check()
-	indexDone := st.TotalIcons()
-	indexOK := indexDone == dataset.ExpectedIcons
-	problems := fileProblems
-	if !indexOK {
-		problems = append(problems, fmt.Sprintf("搜索索引不完整（%d / %d）", indexDone, dataset.ExpectedIcons))
-	}
-	welcomeSig := core.NewSignal(cx, !(filesOK && indexOK))
+	bootSig := core.NewSignal(cx, false)   // splash until true
+	welcomeSig := core.NewSignal(cx, false) // incomplete data after boot
+	problemSig := core.NewSignal(cx, "")
 	sizeSig := core.NewSignal(cx, 128)
 	toaster := ui.NewToaster(cx)
 
 	// The dataset is reopened in place when the first-run download finishes;
 	// spriteOf reads it through this variable each call.
-	ds := deps.Dataset
+	var ds *npy.Dataset
 
 	// The current query's row source. Rows resolve lazily through its page
 	// cache, so the grid can claim the whole result as its count without
@@ -131,61 +127,111 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 			Description: fmt.Sprintf("共 %d 个图标已可搜索", st.TotalIcons())})
 	}
 
-	// --- startup ---
-	runSearch()
+	// --- background boot: integrity check (hashes when a manifest exists)
+	// and dataset open, so the window can show the splash immediately. ---
+	go func() {
+		filesOK, fileProblems := dataset.Check()
+		var problems []string
+		if !filesOK {
+			problems = fileProblems
+		}
+		if indexDone := st.TotalIcons(); indexDone != dataset.ExpectedIcons {
+			problems = append(problems, fmt.Sprintf("搜索索引不完整（%d / %d）", indexDone, dataset.ExpectedIcons))
+		}
+		var dsNew *npy.Dataset
+		if filesOK {
+			if d, err := npy.Open(dataset.Dir()); err == nil {
+				dsNew = d
+			}
+			// Backfill: installs deployed before hash manifests existed.
+			if !dataset.HasManifest() {
+				go func() { _ = dataset.WriteManifest() }()
+			}
+		}
+		cx.Post(func() {
+			ds = dsNew
+			subjectsSig.Set(st.Subjects())
+			allCountSig.Set(st.TotalIcons())
+			if len(problems) > 0 {
+				problemSig.Set(strings.Join(problems, "；"))
+				welcomeSig.Set(true)
+			}
+			bootSig.Set(true)
+			runSearch()
+			if deps.OnBooted != nil {
+				go deps.OnBooted(ds)
+			}
+		})
+	}()
 
 	// --- detail helpers ---
 	closeDetail := func() { detailOpenSig.Set(false) }
 
-	// Layout.
+	// Layout: splash until boot completes, then the browser.
 	return core.View{Class: appClass, Children: []core.Node{
-		sidebar(cx, sidebarState{
-			subjects: subjectsSig, allCount: allCountSig, filter: filterSig,
-			subject: subjectSig, onPick: onSubjectPick,
-		}),
-		core.View{Class: "flex-1 flex-col min-w-0", Children: []core.Node{
-			toolbar(cx, toolbarState{
-				query: querySig, onChange: onQueryChange, onSubmit: onSubmitSearch,
-				onSettings: func() { settingsOpenSig.Set(true) },
-			}),
-			iconGrid(cx, gridState{
-				total:   totalSig,
-				refresh: refreshSig,
-				row: func(i int) (store.Icon, bool) {
-					if pager == nil {
-						return store.Icon{}, false
-					}
-					return pager.row(i)
-				},
-				ensure: func(pg int) {
-					if pager == nil {
-						return
-					}
-					pager.ensure(pg, func() {
-						cx.Post(func() { refreshSig.Set(refreshSig.Get() + 1) })
+		core.Show{When: func() bool { return !bootSig.Get() }, Then: func(cx *core.Scope) core.Node {
+			return splashPanel()
+		}},
+		core.Show{When: bootSig.Get, Then: func(cx *core.Scope) core.Node {
+			return core.View{Class: "w-full h-full flex-row min-h-0", Children: []core.Node{
+				sidebar(cx, sidebarState{
+					subjects: subjectsSig, allCount: allCountSig, filter: filterSig,
+					subject: subjectSig, onPick: onSubjectPick,
+				}),
+				core.View{Class: "flex-1 flex-col min-w-0", Children: []core.Node{
+					toolbar(cx, toolbarState{
+						query: querySig, onChange: onQueryChange, onSubmit: onSubmitSearch,
+						onSettings: func() { settingsOpenSig.Set(true) },
+					}),
+					iconGrid(cx, gridState{
+						total:   totalSig,
+						refresh: refreshSig,
+						row: func(i int) (store.Icon, bool) {
+							if pager == nil {
+								return store.Icon{}, false
+							}
+							return pager.row(i)
+						},
+						ensure: func(pg int) {
+							if pager == nil {
+								return
+							}
+							pager.ensure(pg, func() {
+								cx.Post(func() { refreshSig.Set(refreshSig.Get() + 1) })
+							})
+						},
+						onOpen: func(ic store.Icon) {
+							detailSig.Set(ic)
+							detailOpenSig.Set(true)
+						},
+						spriteOf: spriteOf,
+					}),
+					statusBar(cx, totalSig),
+				}},
+				core.Show{When: detailOpenSig.Get, Then: func(cx *core.Scope) core.Node {
+					return detailPanel(cx, detailState{
+						icon: detailSig, size: sizeSig, toaster: toaster, st: st,
+						onClose: closeDetail, spriteOf: spriteOf,
 					})
-				},
-				onOpen: func(ic store.Icon) {
-					detailSig.Set(ic)
-					detailOpenSig.Set(true)
-				},
-				spriteOf: spriteOf,
-			}),
-			statusBar(cx, totalSig),
-		}},
-		core.Show{When: detailOpenSig.Get, Then: func(cx *core.Scope) core.Node {
-			return detailPanel(cx, detailState{
-				icon: detailSig, size: sizeSig, toaster: toaster, st: st,
-				onClose: closeDetail, spriteOf: spriteOf,
-			})
-		}},
-		core.Show{When: settingsOpenSig.Get, Then: func(cx *core.Scope) core.Node {
-			return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
-		}},
-		core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
-			return welcomePanel(cx, welcomeState{st: st, problem: strings.Join(problems, "；"), onReady: onDatasetReady})
+				}},
+				core.Show{When: settingsOpenSig.Get, Then: func(cx *core.Scope) core.Node {
+					return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
+				}},
+				core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
+					return welcomePanel(cx, welcomeState{st: st, problem: problemSig.Get(), onReady: onDatasetReady})
+				}},
+			}}
 		}},
 		ui.Toasts{Toaster: toaster},
+	}}
+}
+
+// splashPanel is the boot screen: spinner plus a line of status text.
+func splashPanel() core.Node {
+	return core.View{Class: "w-full h-full flex-col items-center justify-center gap-4 bg-neutral-950", Children: []core.Node{
+		ui.ProgressRing{Indeterminate: func() bool { return true }, Size: 40},
+		core.Text{Content: "正在启动 PixelIcon…", Style: core.Style{FontSize: 14}},
+		core.Text{Content: "校验数据完整性并加载数据集（约 3 秒）", Style: core.Style{FontSize: 11, Color: core.RGB(0x737373)}},
 	}}
 }
 

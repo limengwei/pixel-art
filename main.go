@@ -37,24 +37,16 @@ func main() {
 	}
 	defer st.Close()
 
-	var ds *npy.Dataset
-	if ok, problems := dataset.Check(); ok {
-		if d, err := npy.Open(dataset.Dir()); err == nil {
-			ds = d
-		} else {
-			fmt.Fprintf(os.Stderr, "[数据集] %v（仅影响图片显示与导出）\n", err)
-		}
-		// Backfill: installs deployed before hash manifests existed pass the
-		// size check without one — write it in the background (~3s) so the
-		// next startup verifies content too.
-		if !dataset.HasManifest() {
-			go func() { _ = dataset.WriteManifest() }()
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "[数据集] 文件不完整：%s\n", strings.Join(problems, "；"))
-	}
-
+	// stdio MCP boots synchronously (no UI to show a splash).
 	if len(os.Args) > 1 && os.Args[1] == "--mcp" {
+		var ds *npy.Dataset
+		if ok, problems := dataset.Check(); ok {
+			if d, err := npy.Open(dataset.Dir()); err == nil {
+				ds = d
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "[数据集] 文件不完整：%s\n", strings.Join(problems, "；"))
+		}
 		if err := mcp.ServeStdio(st, ds); err != nil {
 			fmt.Fprintf(os.Stderr, "MCP stdio: %v\n", err)
 			os.Exit(1)
@@ -69,19 +61,21 @@ func main() {
 		}
 	}
 
-	// Embedded MCP HTTP server for external clients.
-	go func() {
-		addr := fmt.Sprintf("127.0.0.1:%d", port)
-		if err := mcp.ServeHTTP(addr, st, ds); err != nil {
-			fmt.Fprintf(os.Stderr, "[MCP] %v\n", err)
-		}
-	}()
-
+	// The GUI opens immediately with a splash; the integrity check and
+	// dataset open run in the background and call OnBooted (which starts
+	// the embedded MCP HTTP server with the opened dataset).
 	nsgo.Run(func(app *core.Scope) {
 		desktop.OpenWindow(app, desktop.WindowOptions{
 			Title: "PixelIcon · 像素图标库", Width: 1280, Height: 800, Key: "main",
 		}, func(cx *core.Scope) core.Node {
-			return ui.Main(cx, &ui.Deps{Store: st, Dataset: ds})
+			return ui.Main(cx, &ui.Deps{Store: st, OnBooted: func(ds *npy.Dataset) {
+				go func() {
+					addr := fmt.Sprintf("127.0.0.1:%d", port)
+					if err := mcp.ServeHTTP(addr, st, ds); err != nil {
+						fmt.Fprintf(os.Stderr, "[MCP] %v\n", err)
+					}
+				}()
+			}})
 		})
 	}, nsgo.Appearance(core.AppearanceDark))
 }
