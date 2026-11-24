@@ -1,0 +1,62 @@
+# PixelIcon · 像素图标库
+
+基于 [Pixel Art Atlas](https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m) 数据集的像素图标浏览器与检索工具。140 万个 16×16 合成游戏精灵图，内置预构建的中文搜索索引，支持 MCP 协议供外部工具（如 IDE、AI 助手）直接检索和导出图标。
+
+## 功能
+
+- **图标浏览**：虚拟滚动网格，按需从 `tokens.npy` 渲染精灵图，流畅浏览全部 1,409,404 个图标
+- **中英文搜索**：内置 SQLite + FTS5 全文索引，英文描述与中文标签均可检索（如 `battery` / `电池`）
+- **分类侧栏**：6,194 个主题分类，中英双语显示，支持中文过滤
+- **详情与导出**：任意尺寸放大预览，PNG 一键导出
+- **MCP 服务**：内嵌 MCP 服务器（stdio + HTTP），供 AI 工具搜索、导出图标
+
+## 数据集（pixel-art-16x16-1.4m）
+
+应用仅支持这一个数据集：
+
+- 1,409,404 个 16×16 透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述
+- 图像由 Krea 2 Turbo 与像素画 LoRA 从文本提示生成，以 CC0 1.0 协议发布
+- `tokens.npy` 存储 256 个调色板索引（行主序），索引 0 为透明，其余索引从 `palette.npy` 取 RGB 颜色
+- 描述为生成时的提示词，与图像内容大致对应但不完全精确（颜色、数量、细节可能有出入），使用时请以图像为准
+- 原始数据集共 1,412,908 张，过滤后保留 1,405,308 张训练图与 4,096 张验证图
+
+## 首次启动
+
+首次打开时会出现欢迎页，展示数据集横幅与介绍。点击「下载数据集（约 780 MB）」，应用会从 Hugging Face 下载数据集压缩包到缓存目录并自动解压，全程仅需一次：
+
+```
+https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-art-16x16-1.4m.zip?download=true
+```
+
+下载完成后即可正常浏览。数据集与索引的固定位置：
+
+| 内容 | 路径（Windows） |
+| --- | --- |
+| 搜索索引（内置，首次启动自动解压） | `%LocalAppData%\pixelart\icons.db` |
+| 数据集目录 | `%LocalAppData%\pixelart\pixel-art-16x16-1.4m\` |
+
+应用不再支持其他数据集目录，也无需（也不能）手动重建索引——搜索索引已固化并内置于程序中。
+
+## MCP 服务
+
+启动后自动在本机开启 MCP HTTP 服务（默认端口 9394，可在设置中修改），另可用 `pixelicon.exe --mcp` 以 stdio 模式运行。提供图标搜索与导出工具，供支持 MCP 的客户端接入。
+
+## 构建与开发
+
+```bash
+go build -trimpath -ldflags "-s -w" -o pixelicon.exe .
+go test ./internal/...
+```
+
+### 更新内置索引
+
+搜索索引由 `internal/indexer` 从数据集的 `captions.json` / `objects.json` 构建后压缩内置：
+
+1. 修改 `internal/indexer` 中数据集路径，运行构建得到新的 `icons.db`
+2. 压缩为 `internal/index/icons.db.gz`（gzip）
+3. 重新编译；首次启动会自动解压到缓存目录（删除缓存中的 `icons.db.ok` 可强制重新解压）
+
+## 许可
+
+- 代码：本项目自有版权
+- 数据集：[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)，由 Angais 发布；精灵图为 AI 生成物，不含模型权重
