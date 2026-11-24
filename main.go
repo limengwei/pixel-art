@@ -5,6 +5,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,9 @@ import (
 	"pixelart/internal/store"
 	"pixelart/internal/ui"
 )
+
+//go:embed assets/IconWindows.png
+var trayIcon []byte
 
 func main() {
 	// The search index lives next to the dataset in the cache dir; the
@@ -65,7 +69,7 @@ func main() {
 	// dataset open run in the background and call OnBooted (which starts
 	// the embedded MCP HTTP server with the opened dataset).
 	nsgo.Run(func(app *core.Scope) {
-		desktop.OpenWindow(app, desktop.WindowOptions{
+		win := desktop.OpenWindow(app, desktop.WindowOptions{
 			Title: "PixelIcon · 像素图标库", Width: 1280, Height: 800, Key: "main",
 		}, func(cx *core.Scope) core.Node {
 			return ui.Main(cx, &ui.Deps{Store: st, OnBooted: func(ds *npy.Dataset) {
@@ -76,6 +80,26 @@ func main() {
 					}
 				}()
 			}})
+		})
+
+		// Closing the window hides it to the tray instead of quitting, so the
+		// embedded MCP server keeps serving external clients; the tray menu
+		// shows the window or quits.
+		win.OnClosing(app, func(c *core.WindowClosing) {
+			c.Cancel()
+			win.Hide()
+		})
+		desktop.NewTray(app, desktop.TrayOptions{
+			Icon:    trayIcon,
+			Tooltip: fmt.Sprintf("PixelIcon · 像素图标库 · MCP :%d", port),
+			OnClick: win.Show,
+			Menu: func() []core.MenuItem {
+				return []core.MenuItem{
+					{Label: "显示窗口", OnSelect: win.Show},
+					{Separator: true},
+					{Label: "退出", OnSelect: app.Quit},
+				}
+			},
 		})
 	}, nsgo.Appearance(core.AppearanceDark))
 }
