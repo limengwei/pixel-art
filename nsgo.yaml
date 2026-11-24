@@ -1,5 +1,5 @@
 # pixel-art 的 nsgo 工具配置（go tool nsgo dev / build 使用；
-# 纯 go build 会忽略此文件，图标由 rsrc_windows_amd64.syso 嵌入）。
+# build 会临时生成资源 syso，产物在 dist/releases/）。
 name: pixel-art
 id: dev.mindspace.pixel-art
 version: 1.1.0
@@ -12,6 +12,18 @@ icon:
 
 dev:
   target: native
+
+# 许可证分类器不认识的附加条款文件：memory 的 LICENSE-LOGO（模块本体 BSD）、
+# sqlite 的 LICENSE-SQLITE（SQLite 公有领域声明），非真实风险，放行
+licenses:
+  allow:
+    - modernc.org/memory
+    - modernc.org/sqlite
+
+# 安装 <name>.com 控制台伴随程序并把安装目录加入用户 Path，
+# 终端可直接运行 `pixel-art --mcp`（stdio MCP 模式）
+windows:
+  command_line: true
 
 build:
   output: dist

@@ -3,6 +3,9 @@
 *.syso
 *.test
 *.out
+bin/
+dist/
+.nsgo/
 
 # 本地 IDE / MCP 配置（机器相关）
 .trae/mcp.json
