@@ -52,12 +52,18 @@ func (m *Meta) Len() int {
 
 // loadStrings decodes a JSON array of strings, streaming element by element
 // and interning duplicates (objects.json repeats each subject ~230 times).
+// progress reports bytes consumed vs the file size (fixed per dataset), so
+// the caller can show a real percentage.
 func loadStrings(path string, progress func(done, total int)) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	var total int
+	if fi, err := f.Stat(); err == nil {
+		total = int(fi.Size())
+	}
 	dec := json.NewDecoder(f)
 	if t, err := dec.Token(); err != nil || t != json.Delim('[') {
 		return nil, fmt.Errorf("%s: not a JSON array", path)
@@ -75,8 +81,8 @@ func loadStrings(path string, progress func(done, total int)) ([]string, error) 
 			pool[s] = s
 		}
 		out = append(out, s)
-		if progress != nil && len(out)%200_000 == 0 {
-			progress(len(out), 0)
+		if progress != nil && len(out)%100_000 == 0 {
+			progress(int(dec.InputOffset()), total)
 		}
 	}
 	return out, nil

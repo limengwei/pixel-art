@@ -142,12 +142,16 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 	}}
 }
 
-// indexProgressText renders an indexer.Progress line.
+// indexProgressText renders an indexer.Progress line. The metadata phase
+// reports bytes (file size based); the write phase reports rows.
 func indexProgressText(p indexer.Progress) string {
 	if p.Note != "" {
 		return p.Note
 	}
 	if p.Total > 0 {
+		if p.Phase == "加载元数据" {
+			return fmt.Sprintf("%s %s / %s", p.Phase, humanBytes(int64(p.Done)), humanBytes(int64(p.Total)))
+		}
 		return fmt.Sprintf("%s %d / %d", p.Phase, p.Done, p.Total)
 	}
 	if p.Done > 0 {

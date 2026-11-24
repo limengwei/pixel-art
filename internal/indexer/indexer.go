@@ -40,7 +40,7 @@ func Run(metaDir string, st *store.Store, progress func(Progress)) error {
 	}
 	progress(Progress{Phase: phaseMeta, Note: metaDir})
 	meta, err := LoadMeta(metaDir, func(done, total int) {
-		progress(Progress{Phase: phaseMeta, Done: done})
+		progress(Progress{Phase: phaseMeta, Done: done, Total: total})
 	})
 	if err != nil {
 		return fmt.Errorf("加载元数据失败: %w", err)

@@ -78,8 +78,12 @@ func Download(ctx context.Context, progress func(Progress)) error {
 	return nil
 }
 
-// download streams the zip to disk, reporting byte progress.
+// download streams the zip to disk, reporting byte progress. The total is
+// the Content-Length (prefetched with HEAD when the GET is chunked), so the
+// progress bar always has a denominator.
 func download(ctx context.Context, dst string, progress func(Progress)) error {
+	total := contentLength(ctx)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, DownloadURL, nil)
 	if err != nil {
 		return fmt.Errorf("创建下载请求失败: %w", err)
@@ -92,7 +96,9 @@ func download(ctx context.Context, dst string, progress func(Progress)) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("下载数据集失败: HTTP %d", resp.StatusCode)
 	}
-	total := resp.ContentLength // may be -1 (chunked)
+	if resp.ContentLength > 0 {
+		total = resp.ContentLength
+	}
 	progress(Progress{Phase: "下载", Total: total, Note: dst})
 
 	out, err := os.Create(dst)
@@ -110,7 +116,7 @@ func download(ctx context.Context, dst string, progress func(Progress)) error {
 				return fmt.Errorf("写入下载文件失败: %w", werr)
 			}
 			done += int64(n)
-			if done-last >= 10<<20 || rerr == io.EOF { // update every ~10MB
+			if done-last >= 4<<20 || rerr == io.EOF { // update every ~4MB
 				progress(Progress{Phase: "下载", Done: done, Total: total})
 				last = done
 			}
@@ -130,22 +136,54 @@ func download(ctx context.Context, dst string, progress func(Progress)) error {
 	return nil
 }
 
+// contentLength prefetches the zip size with a HEAD request; 0 when the
+// server does not tell.
+func contentLength(ctx context.Context) int64 {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, DownloadURL, nil)
+	if err != nil {
+		return 0
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.ContentLength > 0 {
+		return resp.ContentLength
+	}
+	return 0
+}
+
 // extract unpacks the zip beside dst so the dataset lands at Dir().
 func extract(zipPath string, progress func(Progress)) error {
+	return extractAt(filepath.Dir(Dir()), Dir(), zipPath, progress)
+}
+
+// extractAt unpacks the zip under base (entries keep their inner paths);
+// when the zip has no top-level dataset folder the loose files are moved
+// into dir. Progress is bytes extracted vs the sum of uncompressed sizes
+// (fixed for this dataset), reported in ~16MB steps so a single huge file
+// like tokens.npy still moves the bar.
+func extractAt(base, dir, zipPath string, progress func(Progress)) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("打开压缩包失败: %w", err)
 	}
 	defer zr.Close()
 
-	base := filepath.Dir(Dir()) // extraction root
 	var total int64
 	for _, f := range zr.File {
 		total += int64(f.UncompressedSize64)
 	}
 	progress(Progress{Phase: "解压", Total: total})
 
-	var done int64
+	var done, last int64
+	report := func() {
+		if done-last >= 16<<20 || done == total {
+			progress(Progress{Phase: "解压", Done: done, Total: total})
+			last = done
+		}
+	}
 	for _, f := range zr.File {
 		name := filepath.FromSlash(f.Name)
 		if !filepath.IsLocal(name) {
@@ -161,23 +199,25 @@ func extract(zipPath string, progress func(Progress)) error {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return fmt.Errorf("解压失败: %w", err)
 		}
-		if err := extractFile(f, dst); err != nil {
+		if err := extractFile(f, dst, func(n int64) {
+			done += n
+			report()
+		}); err != nil {
 			return err
 		}
-		done += int64(f.UncompressedSize64)
-		progress(Progress{Phase: "解压", Done: done, Total: total})
 	}
 	// The zip may or may not carry the top-level dataset folder; if it
-	// doesn't, the files landed directly in base — move them into Dir().
-	if !Ready() {
-		if err := hoist(base); err != nil {
+	// doesn't, the files landed directly in base — move them into dir.
+	if _, err := os.Stat(filepath.Join(dir, "tokens.npy")); err != nil {
+		if err := hoist(base, dir); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func extractFile(f *zip.File, dst string) error {
+// extractFile copies one zip entry in chunks, reporting each chunk's bytes.
+func extractFile(f *zip.File, dst string, onBytes func(int64)) error {
 	src, err := f.Open()
 	if err != nil {
 		return fmt.Errorf("解压失败: %w", err)
@@ -187,21 +227,35 @@ func extractFile(f *zip.File, dst string) error {
 	if err != nil {
 		return fmt.Errorf("解压失败: %w", err)
 	}
-	if _, err := io.Copy(out, src); err != nil {
-		out.Close()
-		return fmt.Errorf("解压失败: %w", err)
+	buf := make([]byte, 8<<20)
+	for {
+		n, rerr := src.Read(buf)
+		if n > 0 {
+			if _, werr := out.Write(buf[:n]); werr != nil {
+				out.Close()
+				return fmt.Errorf("解压失败: %w", werr)
+			}
+			onBytes(int64(n))
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			out.Close()
+			return fmt.Errorf("解压失败: %w", rerr)
+		}
 	}
 	return out.Close()
 }
 
-// hoist moves loose dataset files from base into Dir() (used when the zip
+// hoist moves loose dataset files from base into dir (used when the zip
 // has no top-level folder).
-func hoist(base string) error {
+func hoist(base, dir string) error {
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(Dir(), 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	for _, e := range entries {
@@ -209,7 +263,7 @@ func hoist(base string) error {
 			!strings.HasSuffix(e.Name(), ".md") && !strings.HasSuffix(e.Name(), ".png") {
 			continue
 		}
-		if err := os.Rename(filepath.Join(base, e.Name()), filepath.Join(Dir(), e.Name())); err != nil {
+		if err := os.Rename(filepath.Join(base, e.Name()), filepath.Join(dir, e.Name())); err != nil {
 			return fmt.Errorf("解压失败: %w", err)
 		}
 	}
