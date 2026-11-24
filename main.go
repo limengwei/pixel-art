@@ -5,11 +5,11 @@
 package main
 
 import (
-	"bufio"
 	_ "embed"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -30,41 +30,55 @@ import (
 var trayIcon []byte
 
 // singleInstanceAddr is the local lock the GUI holds to stay a single
-// instance: the first process listens on it, later ones ask it (over the
-// same socket) to show the running window and exit.
+// instance: the running process listens on it.
 const singleInstanceAddr = "127.0.0.1:9396"
 
-// acquireSingleInstance holds the singleton lock. When another instance
-// already runs it pokes that instance to show its window and reports false.
-// activate is invoked (from a goroutine) whenever a later instance asks;
-// release frees the lock.
-func acquireSingleInstance(activate func()) (release func(), ok bool) {
+const singleInstancePort = "9396"
+
+// acquireSingleInstance takes the single-instance lock. A previous
+// instance still holding it (hiding in the tray) is killed, so the newest
+// launch always wins and shows its own window. release frees the lock for
+// an in-app restart.
+func acquireSingleInstance() (release func()) {
 	ln, err := net.Listen("tcp", singleInstanceAddr)
 	if err != nil {
-		// Tell the running instance to come to the front.
-		if c, derr := net.DialTimeout("tcp", singleInstanceAddr, time.Second); derr == nil {
-			_ = c.SetDeadline(time.Now().Add(2 * time.Second))
-			_, _ = c.Write([]byte("show\n"))
-			_ = c.Close()
+		killPreviousInstance()
+		for i := 0; i < 30 && err != nil; i++ {
+			time.Sleep(100 * time.Millisecond)
+			ln, err = net.Listen("tcp", singleInstanceAddr)
 		}
-		return nil, false
+		if err != nil {
+			// A foreign program squats the port; run without the lock.
+			fmt.Fprintf(os.Stderr, "[单实例] %s 被其他程序占用，跳过单实例保护\n", singleInstanceAddr)
+			return func() {}
+		}
 	}
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return // released or closing
-			}
-			go func() {
-				line, _ := bufio.NewReader(c).ReadString('\n')
-				_ = c.Close()
-				if strings.TrimSpace(line) == "show" {
-					activate()
-				}
-			}()
+	return func() { _ = ln.Close() }
+}
+
+// killPreviousInstance force-kills the process listening on the singleton
+// port — the previous GUI instance. Its SQLite index is WAL-backed, so a
+// kill here is recovered cleanly on the next open.
+func killPreviousInstance() {
+	out, err := exec.Command("netstat", "-ano", "-p", "tcp").Output()
+	if err != nil {
+		return
+	}
+	self := os.Getpid()
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, "LISTENING") {
+			continue
 		}
-	}()
-	return func() { _ = ln.Close() }, true
+		f := strings.Fields(strings.TrimSpace(line))
+		if len(f) < 5 || !strings.HasSuffix(f[1], ":"+singleInstancePort) {
+			continue
+		}
+		if pid, err := strconv.Atoi(f[4]); err == nil && pid != self {
+			if p, err := os.FindProcess(pid); err == nil {
+				_ = p.Kill()
+			}
+		}
+	}
 }
 
 func main() {
@@ -106,18 +120,9 @@ func main() {
 		}
 	}
 
-	// Only one GUI instance: a later start asks the running one to show its
-	// window and exits instead of launching a second copy.
-	activateCh := make(chan struct{}, 1)
-	releaseSingleton, first := acquireSingleInstance(func() {
-		select {
-		case activateCh <- struct{}{}:
-		default:
-		}
-	})
-	if !first {
-		return
-	}
+	// Only one GUI instance: the newest launch kills the previous one
+	// (running in the tray) and takes over the lock.
+	releaseSingleton := acquireSingleInstance()
 
 	// The GUI opens immediately with a splash; the integrity check and
 	// dataset open run in the background and call OnBooted (which starts
@@ -136,13 +141,6 @@ func main() {
 					}()
 				}})
 		})
-
-		// A later instance asked us to come to the front.
-		go func() {
-			for range activateCh {
-				app.Post(win.Show)
-			}
-		}()
 
 		// Closing the window hides it to the tray instead of quitting, so the
 		// embedded MCP server keeps serving external clients; the tray menu
