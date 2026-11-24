@@ -93,30 +93,9 @@ func detailPanel(cx *core.Scope, s detailState) core.Node {
 			core.Text{Content: "导出尺寸", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3)}},
 			core.View{Class: "flex-row gap-2 flex-wrap", Children: sizeButtons(s)},
 
-			core.View{Class: "gap-2 flex-col", Children: []core.Node{
-				ui.Button{TextFunc: func() string {
-					return fmt.Sprintf("导出 PNG（%dpx）", s.size.Get())
-				}, OnPress: doExport},
-				ui.Button{Text: "复制图片", OnPress: func() {
-					ic := s.icon.Get()
-					img := s.spriteOf(ic.ID)
-					if img == nil {
-						s.toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "复制失败", Description: "数据集不可用"})
-						return
-					}
-					data, err := exporter.EncodePNG(img)
-					if err != nil {
-						s.toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "复制失败", Description: err.Error()})
-						return
-					}
-					cx.SetClipboardImage(data)
-					s.toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "已复制图片"})
-				}},
-				ui.Button{Text: "复制 ID", OnPress: func() {
-					cx.SetClipboard(fmt.Sprintf("%d", s.icon.Get().ID))
-					s.toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "已复制 ID"})
-				}},
-			}},
+			ui.Button{TextFunc: func() string {
+				return fmt.Sprintf("导出 PNG（%dpx）", s.size.Get())
+			}, OnPress: doExport},
 		}},
 	}}
 }
@@ -137,8 +116,6 @@ func infoRows(s detailState) core.Node {
 			return i.Caption
 		}, Style: core.Style{FontSize: 14}},
 		row("主体 Subject", func() string { return s.icon.Get().Subject }),
-		row("ID（数据集行号）", func() string { return fmt.Sprintf("%d", s.icon.Get().ID) }),
-		row("源", func() string { return "tokens.npy 按需解码（16×16）" }),
 	}}
 }
 
