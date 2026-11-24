@@ -43,7 +43,9 @@ https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-a
 
 ## MCP 服务
 
-启动后自动在本机开启 MCP HTTP 服务（默认端口 9394，可在设置中修改），另可用 `pixelicon.exe --mcp` 以 stdio 模式运行。提供图标搜索与导出工具，供支持 MCP 的客户端接入。
+启动后自动在本机开启 MCP HTTP 服务（默认端口 9394，工具栏「MCP」按钮打开设置页，可查看/复制接入地址、客户端 JSON 配置与工具文档，端口可修改、重启生效），另可用 `pixelicon.exe --mcp` 以 stdio 模式运行。提供图标搜索与导出工具，供支持 MCP 的客户端接入。
+
+**关闭主窗口不会退出程序**：应用最小化到系统托盘继续提供 MCP 服务，单击托盘图标恢复窗口，托盘右键菜单可选择「显示窗口」或「退出」。
 
 ## 构建与开发
 
