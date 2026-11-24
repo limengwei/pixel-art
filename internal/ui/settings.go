@@ -11,7 +11,6 @@ import (
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/ui"
 
-	"pixelart/internal/dataset"
 	"pixelart/internal/mcp"
 )
 
@@ -164,12 +163,8 @@ func settingsPanel(cx *core.Scope, deps *Deps, toaster *ui.Toaster, onClose func
 					core.View{Class: "gap-2 flex-col pt-3 border-t border-neutral-800", Children: []core.Node{
 						core.Text{Content: fmt.Sprintf("图标总数：%d · 分类数：%d", st.TotalIcons(), len(st.Subjects())), Style: labelStyle},
 						core.View{Class: "gap-1 flex-col", Children: []core.Node{
-							core.Text{Content: "数据集目录", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-							core.Text{Content: dataset.Dir(), Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-						}},
-						core.View{Class: "gap-1 flex-col", Children: []core.Node{
-							core.Text{Content: "索引数据库", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
-							core.Text{Content: dataset.DBPath(), Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+							core.Text{Content: "数据来源", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
+							core.Text{Content: "https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m", Style: core.Style{FontSize: 10, Color: core.RGB(0x737373)}},
 						}},
 					}},
 				},
