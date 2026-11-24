@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Name is the dataset's on-disk directory name.
@@ -24,6 +25,17 @@ const Name = "pixel-art-16x16-1.4m"
 
 // DownloadURL is the Hugging Face zip download link.
 const DownloadURL = "https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-art-16x16-1.4m.zip?download=true"
+
+// MirrorURL is hf-mirror.com's copy of the same file — identical paths, no
+// account — so mainland-China downloads do not crawl through huggingface.co.
+const MirrorURL = "https://hf-mirror.com/datasets/Angais/pixel-art-atlas-1.4m/resolve/main/pixel-art-16x16-1.4m.zip?download=true"
+
+// sources are the download endpoints tried in order: the mirror first
+// (fast in China, works worldwide), then Hugging Face itself.
+var sources = []struct{ label, url string }{
+	{"hf-mirror.com 镜像", MirrorURL},
+	{"Hugging Face 官方", DownloadURL},
+}
 
 // Dir returns the dataset directory under the user cache dir.
 func Dir() string {
@@ -188,28 +200,46 @@ func Download(ctx context.Context, progress func(Progress)) error {
 	return nil
 }
 
-// download streams the zip to disk, reporting byte progress. The total is
-// the Content-Length (prefetched with HEAD when the GET is chunked), so the
+// download streams the zip to disk through the first source that answers,
+// falling back to the next one on failure. Byte progress is reported per
+// source; the total is the Content-Length (prefetched with HEAD), so the
 // progress bar always has a denominator.
 func download(ctx context.Context, dst string, progress func(Progress)) error {
-	total := contentLength(ctx)
+	var lastErr error
+	for _, src := range sources {
+		if err := downloadFrom(ctx, src, dst, progress); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			os.Remove(dst) // drop the partial file before the next source
+		}
+	}
+	return fmt.Errorf("%w（镜像与官方源均失败）", lastErr)
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, DownloadURL, nil)
+// downloadFrom streams the zip from one source, reporting byte progress.
+func downloadFrom(ctx context.Context, src struct{ label, url string }, dst string, progress func(Progress)) error {
+	total, ok := probe(ctx, src.url)
+	if !ok {
+		return fmt.Errorf("无法连接 %s", src.label)
+	}
+	progress(Progress{Phase: "下载", Total: total, Note: "使用 " + src.label + " 下载…"})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.url, nil)
 	if err != nil {
 		return fmt.Errorf("创建下载请求失败: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("下载数据集失败: %w", err)
+		return fmt.Errorf("下载数据集失败（%s）: %w", src.label, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("下载数据集失败: HTTP %d", resp.StatusCode)
+		return fmt.Errorf("下载数据集失败（%s）: HTTP %d", src.label, resp.StatusCode)
 	}
 	if resp.ContentLength > 0 {
 		total = resp.ContentLength
 	}
-	progress(Progress{Phase: "下载", Total: total, Note: dst})
 
 	out, err := os.Create(dst)
 	if err != nil {
@@ -236,7 +266,7 @@ func download(ctx context.Context, dst string, progress func(Progress)) error {
 		}
 		if rerr != nil {
 			out.Close()
-			return fmt.Errorf("下载数据集失败: %w", rerr)
+			return fmt.Errorf("下载数据集失败（%s）: %w", src.label, rerr)
 		}
 	}
 	if err := out.Close(); err != nil {
@@ -246,22 +276,22 @@ func download(ctx context.Context, dst string, progress func(Progress)) error {
 	return nil
 }
 
-// contentLength prefetches the zip size with a HEAD request; 0 when the
-// server does not tell.
-func contentLength(ctx context.Context) int64 {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, DownloadURL, nil)
+// probe measures a source's zip size with a HEAD request that gives up
+// after a short wait, so an unreachable source falls through to the next
+// instead of hanging the download.
+func probe(ctx context.Context, url string) (size int64, ok bool) {
+	c, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(c, http.MethodHead, url, nil)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	defer resp.Body.Close()
-	if resp.ContentLength > 0 {
-		return resp.ContentLength
-	}
-	return 0
+	return resp.ContentLength, resp.StatusCode == http.StatusOK
 }
 
 // extract unpacks the zip beside dst so the dataset lands at Dir().

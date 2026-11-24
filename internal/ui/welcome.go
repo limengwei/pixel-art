@@ -123,7 +123,7 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 
 			core.View{Class: "gap-1.5 flex-col items-center", Children: []core.Node{
 				core.Text{Content: "1,409,404 个透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
-				core.Text{Content: "首次部署需下载数据集（压缩包约 253 MB，来自 Hugging Face，CC0 1.0）并构建搜索索引（约 3–5 分钟），仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
+				core.Text{Content: "首次部署需下载数据集（压缩包约 253 MB，来自 Hugging Face，国内自动走 hf-mirror.com 镜像，CC0 1.0）并构建搜索索引（约 3–5 分钟），仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
 			}},
 
 			// integrity problems found at startup (half downloads, half

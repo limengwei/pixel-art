@@ -53,7 +53,7 @@ The app supports this single dataset:
 
 On first launch (or when data is incomplete), a welcome page shows the dataset banner. Click **Deploy Dataset** and the app completes three steps in one click (only once; the first two are skipped if the dataset already exists):
 
-1. Download the dataset archive from Hugging Face (~253 MB zip, ~770 MB extracted)
+1. Download the dataset archive from Hugging Face (~253 MB zip, ~770 MB extracted) — via the [hf-mirror.com](https://hf-mirror.com) mirror first for mainland-China speeds, falling back to the official source
 2. Extract it to the cache directory
 3. Build the search index (~3–5 minutes, ~211 MB)
 
