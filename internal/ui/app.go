@@ -12,6 +12,7 @@ import (
 	"pixelart/internal/indexer"
 	"pixelart/internal/npy"
 	"pixelart/internal/store"
+	"pixelart/internal/translate"
 )
 
 // Deps carries what the UI needs from main.
@@ -193,7 +194,8 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 
 const appClass = "w-full h-full flex-row bg-neutral-950 text-neutral-100 overflow-hidden"
 
-// visibleSubjects filters subjects by a case-insensitive substring.
+// visibleSubjects filters subjects by a case-insensitive substring over the
+// English name or its Chinese translation.
 func visibleSubjects(all []store.Subject, filter string) []store.Subject {
 	filter = strings.TrimSpace(strings.ToLower(filter))
 	if filter == "" {
@@ -201,7 +203,8 @@ func visibleSubjects(all []store.Subject, filter string) []store.Subject {
 	}
 	out := make([]store.Subject, 0, 64)
 	for _, s := range all {
-		if strings.Contains(strings.ToLower(s.Name), filter) {
+		if strings.Contains(strings.ToLower(s.Name), filter) ||
+			strings.Contains(translate.Subject(s.Name), filter) {
 			out = append(out, s)
 		}
 	}
