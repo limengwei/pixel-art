@@ -13,6 +13,8 @@ import (
 	"github.com/nsgo-dev/nsgo/ui"
 
 	"pixelart/internal/dataset"
+	"pixelart/internal/indexer"
+	"pixelart/internal/store"
 )
 
 //go:embed banner.png
@@ -30,16 +32,34 @@ var bannerRGBA = func() *image.RGBA {
 	return rgba
 }()
 
-// welcomeState feeds the first-launch overlay.
+// welcomeState feeds the first-launch deploy overlay.
 type welcomeState struct {
-	onReady func() // dataset became ready: reopen and refresh
+	st      *store.Store
+	onReady func() // data complete: reopen dataset, refresh and search
 }
 
-// welcomePanel is shown when the dataset is not installed yet: banner,
-// Chinese introduction, and the one-shot download + extract.
+// deployProgress is one step of the deploy pipeline (download → extract →
+// build index) as shown in the progress row.
+type deployProgress struct {
+	phase string
+	text  string
+	frac  float32 // 0..1; 0 = indeterminate
+}
+
+// welcomePanel is shown when the app's data is incomplete: banner, Chinese
+// introduction, and a one-click deploy that downloads, extracts and indexes
+// the dataset.
 func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 	stateSig := core.NewSignal(cx, "idle") // idle | running | error
-	progSig := core.NewSignal(cx, dataset.Progress{})
+	progSig := core.NewSignal(cx, deployProgress{})
+
+	post := func(p deployProgress) { cx.Post(func() { progSig.Set(p) }) }
+	fail := func(err error) {
+		cx.Post(func() {
+			stateSig.Set("error")
+			progSig.Set(deployProgress{phase: "失败", text: err.Error()})
+		})
+	}
 
 	start := func() {
 		if stateSig.Get() == "running" {
@@ -47,17 +67,24 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 		}
 		stateSig.Set("running")
 		go func() {
-			err := dataset.Download(context.Background(), func(p dataset.Progress) {
-				cx.Post(func() { progSig.Set(p) })
-			})
-			cx.Post(func() {
-				if err != nil {
-					stateSig.Set("error")
-					progSig.Set(dataset.Progress{Phase: "失败", Note: err.Error()})
+			// 1. Download + extract (skipped when the dataset is in place).
+			if !dataset.Ready() {
+				post(deployProgress{phase: "下载", text: "准备下载…"})
+				if err := dataset.Download(context.Background(), func(p dataset.Progress) {
+					post(deployProgress{phase: p.Phase, text: progressText(p), frac: fracOf(p.Done, p.Total)})
+				}); err != nil {
+					fail(err)
 					return
 				}
-				s.onReady()
-			})
+			}
+			// 2. Build the search index (idempotent).
+			if err := indexer.Run(dataset.Dir(), s.st, func(p indexer.Progress) {
+				post(deployProgress{phase: "构建索引", text: indexProgressText(p), frac: indexFrac(p)})
+			}); err != nil {
+				fail(err)
+				return
+			}
+			cx.Post(func() { s.onReady() })
 		}()
 	}
 
@@ -82,43 +109,59 @@ func welcomePanel(cx *core.Scope, s welcomeState) core.Node {
 
 			core.View{Class: "gap-1.5 flex-col items-center", Children: []core.Node{
 				core.Text{Content: "1,409,404 个 16×16 透明背景的合成游戏精灵图，覆盖 6,194 个主题分类，附带英文描述。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
-				core.Text{Content: "数据集来自 Hugging Face（CC0 1.0 协议），约 780 MB；下载到应用缓存目录并自动解压，仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
+				core.Text{Content: "首次部署需下载数据集（约 780 MB，来自 Hugging Face，CC0 1.0）并构建搜索索引（约 3–5 分钟），仅需一次。", Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3), TextAlign: core.TextAlignCenter}},
 			}},
 
-			// download button / progress / error
+			// deploy button / progress / error
 			core.Show{When: func() bool { return stateSig.Get() != "running" }, Then: func(cx *core.Scope) core.Node {
-				label := "下载数据集（约 780 MB）"
+				label := "部署数据集（下载 · 解压 · 构建索引）"
+				if dataset.Ready() {
+					label = "构建搜索索引"
+				}
 				if stateSig.Get() == "error" {
-					label = "重试下载"
+					label = "重试部署"
 				}
 				return core.View{Class: "gap-2 flex-col items-center", Children: []core.Node{
 					ui.Button{Text: label, OnPress: start},
 					core.Show{When: func() bool { return stateSig.Get() == "error" }, Then: func(cx *core.Scope) core.Node {
-						return core.Text{Content: progSig.Get().Note, Style: core.Style{FontSize: 11, Color: core.RGB(0xf87171)}}
+						return core.Text{Content: progSig.Get().text, Style: core.Style{FontSize: 11, Color: core.RGB(0xf87171)}}
 					}},
 				}}
 			}},
 			core.Show{When: func() bool { return stateSig.Get() == "running" }, Then: func(cx *core.Scope) core.Node {
 				p := progSig.Get()
 				return core.View{Class: "w-[480px] max-w-full gap-2 flex-col items-center", Children: []core.Node{
-					core.Text{Content: progressText(p), Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3)}},
-					ui.Progress{Value: func() float32 {
-						q := progSig.Get()
-						if q.Total <= 0 {
-							return 0
-						}
-						v := float32(q.Done) / float32(q.Total)
-						if v > 1 {
-							v = 1
-						}
-						return v
-					}},
+					core.Text{Content: p.text, Style: core.Style{FontSize: 12, Color: core.RGB(0xa3a3a3)}},
+					ui.Progress{Value: func() float32 { return progSig.Get().frac },
+						Indeterminate: func() bool { return progSig.Get().frac <= 0 }},
 				}}
 			}},
 
 			core.Text{Content: fmt.Sprintf("缓存位置：%s", dataset.Dir()), Style: core.Style{FontSize: 10, Color: core.RGB(0x525252)}},
 		}},
 	}}
+}
+
+// indexProgressText renders an indexer.Progress line.
+func indexProgressText(p indexer.Progress) string {
+	if p.Note != "" {
+		return p.Note
+	}
+	if p.Total > 0 {
+		return fmt.Sprintf("%s %d / %d", p.Phase, p.Done, p.Total)
+	}
+	if p.Done > 0 {
+		return fmt.Sprintf("%s %d", p.Phase, p.Done)
+	}
+	return p.Phase
+}
+
+// indexFrac maps an indexer.Progress to 0..1 (0 = indeterminate).
+func indexFrac(p indexer.Progress) float32 {
+	if p.Total <= 0 {
+		return 0
+	}
+	return min(float32(p.Done)/float32(p.Total), 1)
 }
 
 // progressText renders a download/extract Progress line.
@@ -143,6 +186,14 @@ func progressText(p dataset.Progress) string {
 		}
 		return p.Phase
 	}
+}
+
+// fracOf maps a done/total pair to 0..1 (0 = indeterminate).
+func fracOf(done, total int64) float32 {
+	if total <= 0 {
+		return 0
+	}
+	return min(float32(done)/float32(total), 1)
 }
 
 // humanBytes formats a byte count for display.

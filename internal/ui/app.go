@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"fmt"
 	"image"
 	"strings"
 	"time"
@@ -42,7 +43,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 	detailSig := core.NewSignal(cx, store.Icon{})
 	detailOpenSig := core.NewSignal(cx, false)
 	settingsOpenSig := core.NewSignal(cx, false)
-	welcomeSig := core.NewSignal(cx, !dataset.Ready()) // first-launch overlay
+	welcomeSig := core.NewSignal(cx, !dataset.Ready() || st.TotalIcons() == 0) // incomplete data
 	sizeSig := core.NewSignal(cx, 128)
 	toaster := ui.NewToaster(cx)
 
@@ -106,14 +107,17 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 		runSearch()
 	}
 
-	// --- first-run: the dataset finished downloading ---
+	// --- first-run: the deploy finished (dataset + index in place) ---
 	onDatasetReady := func() {
 		if d, err := npy.Open(dataset.Dir()); err == nil {
 			ds = d
 		}
+		subjectsSig.Set(st.Subjects())
+		allCountSig.Set(st.TotalIcons())
 		welcomeSig.Set(false)
-		refreshSig.Set(refreshSig.Get() + 1)
-		toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "数据集已就绪", Description: dataset.Dir()})
+		runSearch()
+		toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "部署完成",
+			Description: fmt.Sprintf("共 %d 个图标已可搜索", st.TotalIcons())})
 	}
 
 	// --- startup ---
@@ -168,7 +172,7 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 			return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
 		}},
 		core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
-			return welcomePanel(cx, welcomeState{onReady: onDatasetReady})
+			return welcomePanel(cx, welcomeState{st: st, onReady: onDatasetReady})
 		}},
 		ui.Toasts{Toaster: toaster},
 	}}
