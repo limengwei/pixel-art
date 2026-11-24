@@ -9,7 +9,7 @@ import (
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/ui"
 
-	"pixelart/internal/indexer"
+	"pixelart/internal/dataset"
 	"pixelart/internal/npy"
 	"pixelart/internal/store"
 	"pixelart/internal/translate"
@@ -18,8 +18,7 @@ import (
 // Deps carries what the UI needs from main.
 type Deps struct {
 	Store   *store.Store
-	Dataset *npy.Dataset // may be nil when tokens.npy is unavailable
-	MetaDir string
+	Dataset *npy.Dataset // may be nil until the first-run download finishes
 }
 
 // pageSize is how many icons one background page fetch loads.
@@ -27,9 +26,6 @@ const pageSize = 200
 
 // cellSize is one grid cell's icon box.
 const cellSize = 76
-
-// indexerProgress aliases the indexer's progress payload for the UI files.
-type indexerProgress = indexer.Progress
 
 // Main renders the whole app window content.
 func Main(cx *core.Scope, deps *Deps) core.Node {
@@ -43,13 +39,16 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 	refreshSig := core.NewSignal(cx, 0) // bumped when a page arrives
 	subjectsSig := core.NewSignalFunc(cx, st.Subjects(), nil)
 	allCountSig := core.NewSignal(cx, st.TotalIcons())
-	progressSig := core.NewSignal(cx, indexer.Progress{})
-	scanningSig := core.NewSignal(cx, false)
 	detailSig := core.NewSignal(cx, store.Icon{})
 	detailOpenSig := core.NewSignal(cx, false)
 	settingsOpenSig := core.NewSignal(cx, false)
+	welcomeSig := core.NewSignal(cx, !dataset.Ready()) // first-launch overlay
 	sizeSig := core.NewSignal(cx, 128)
 	toaster := ui.NewToaster(cx)
+
+	// The dataset is reopened in place when the first-run download finishes;
+	// spriteOf reads it through this variable each call.
+	ds := deps.Dataset
 
 	// The current query's row source. Rows resolve lazily through its page
 	// cache, so the grid can claim the whole result as its count without
@@ -58,10 +57,10 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 
 	// --- sprite decoding (on demand, cached inside the dataset) ---
 	spriteOf := func(id int64) *image.RGBA {
-		if deps.Dataset == nil {
+		if ds == nil {
 			return nil
 		}
-		img, err := deps.Dataset.Row(id)
+		img, err := ds.Row(id)
 		if err != nil {
 			return nil
 		}
@@ -107,37 +106,18 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 		runSearch()
 	}
 
-	// --- indexing ---
-	rebuild := func() {
-		if scanningSig.Get() {
-			toaster.Show(ui.ToastContent{Type: ui.ToastPlain, Title: "正在索引中", Description: "请等待当前任务完成"})
-			return
+	// --- first-run: the dataset finished downloading ---
+	onDatasetReady := func() {
+		if d, err := npy.Open(dataset.Dir()); err == nil {
+			ds = d
 		}
-		scanningSig.Set(true)
-		metaDir := st.GetSetting("meta_dir", indexer.DefaultMetaDir)
-		go func() {
-			err := indexer.Run(metaDir, st, func(p indexer.Progress) {
-				cx.Post(func() { progressSig.Set(p) })
-			})
-			cx.Post(func() {
-				scanningSig.Set(false)
-				if err != nil {
-					toaster.Show(ui.ToastContent{Type: ui.ToastError, Title: "索引失败", Description: err.Error(), Duration: 10 * time.Second})
-				} else {
-					toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "索引完成", Description: progressSig.Get().Note})
-				}
-				subjectsSig.Set(st.Subjects())
-				allCountSig.Set(st.TotalIcons())
-				runSearch()
-			})
-		}()
+		welcomeSig.Set(false)
+		refreshSig.Set(refreshSig.Get() + 1)
+		toaster.Show(ui.ToastContent{Type: ui.ToastSuccess, Title: "数据集已就绪", Description: dataset.Dir()})
 	}
 
-	// --- startup: count the whole set, and build the index when empty. ---
+	// --- startup ---
 	runSearch()
-	if indexer.NeedsBuild(st) {
-		rebuild()
-	}
 
 	// --- detail helpers ---
 	closeDetail := func() { detailOpenSig.Set(false) }
@@ -151,9 +131,8 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 		core.View{Class: "flex-1 flex-col min-w-0", Children: []core.Node{
 			toolbar(cx, toolbarState{
 				query: querySig, onChange: onQueryChange, onSubmit: onSubmitSearch,
-				onRebuild: rebuild, onSettings: func() { settingsOpenSig.Set(true) },
+				onSettings: func() { settingsOpenSig.Set(true) },
 			}),
-			progressRow(cx, progressSig, scanningSig),
 			iconGrid(cx, gridState{
 				total:   totalSig,
 				refresh: refreshSig,
@@ -186,7 +165,10 @@ func Main(cx *core.Scope, deps *Deps) core.Node {
 			})
 		}},
 		core.Show{When: settingsOpenSig.Get, Then: func(cx *core.Scope) core.Node {
-			return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) }, rebuild)
+			return settingsPanel(cx, deps, toaster, func() { settingsOpenSig.Set(false) })
+		}},
+		core.Show{When: welcomeSig.Get, Then: func(cx *core.Scope) core.Node {
+			return welcomePanel(cx, welcomeState{onReady: onDatasetReady})
 		}},
 		ui.Toasts{Toaster: toaster},
 	}}

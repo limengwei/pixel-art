@@ -16,7 +16,6 @@ type toolbarState struct {
 	query      *core.Signal[string]
 	onChange   func(string)
 	onSubmit   func()
-	onRebuild  func()
 	onSettings func()
 }
 
@@ -32,38 +31,7 @@ func toolbar(cx *core.Scope, s toolbarState) core.Node {
 				AutoFocus:   true,
 			},
 		}},
-		ui.Button{Text: "重建索引", OnPress: s.onRebuild},
 		ui.Button{Text: "设置", OnPress: s.onSettings},
-	}}
-}
-
-// progressRow shows the indexing progress while a build runs.
-func progressRow(cx *core.Scope, progress *core.Signal[indexerProgress], scanning *core.Signal[bool]) core.Node {
-	return core.Show{When: scanning.Get, Then: func(cx *core.Scope) core.Node {
-		p := progress.Get()
-		text := p.Phase
-		if p.Total > 0 {
-			text += fmt.Sprintf(" %d/%d", p.Done, p.Total)
-		} else if p.Done > 0 {
-			text += fmt.Sprintf(" %d", p.Done)
-		}
-		if p.Note != "" {
-			text += " · " + p.Note
-		}
-		return core.View{Class: "px-3 pb-2 gap-2 flex-col", Children: []core.Node{
-			core.Text{Content: text, Style: core.Style{FontSize: 11, Color: core.RGB(0xa3a3a3)}},
-			ui.Progress{Value: func() float32 {
-				q := progress.Get()
-				if q.Total <= 0 {
-					return 0
-				}
-				v := float32(q.Done) / float32(q.Total)
-				if v > 1 {
-					v = 1
-				}
-				return v
-			}},
-		}}
 	}}
 }
 
@@ -142,7 +110,7 @@ func iconGrid(cx *core.Scope, s gridState) core.Node {
 			}
 			return cell(i)
 		},
-		Empty: core.Text{Content: "暂无图标（等待索引完成）", Style: core.Style{FontSize: 13, Color: core.RGB(0x737373)}},
+		Empty: core.Text{Content: "暂无图标", Style: core.Style{FontSize: 13, Color: core.RGB(0x737373)}},
 	}}}
 }
 
