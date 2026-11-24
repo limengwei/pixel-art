@@ -1,0 +1,12 @@
+# 构建产物 / generated build artifacts
+*.exe
+*.syso
+*.test
+*.out
+
+# 本地 IDE / MCP 配置（机器相关）
+.trae/mcp.json
+
+# 系统杂项
+Thumbs.db
+.DS_Store
