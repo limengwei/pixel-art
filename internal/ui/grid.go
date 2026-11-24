@@ -11,6 +11,9 @@ import (
 	"pixelart/internal/store"
 )
 
+// robotSVG is the toolbar MCP button's icon (explicit fill, not tinted).
+var robotSVG = core.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" fill="#E5E5E5" viewBox="0 0 24 24"><path d="M13.5 2C13.5 2.44425 13.3069 2.84339 13 3.11805V5H18C19.6569 5 21 6.34315 21 8V18C21 19.6569 19.6569 21 18 21H6C4.34315 21 3 19.6569 3 18V8C3 6.34315 4.34315 5 6 5H11V3.11805C10.6931 2.84339 10.5 2.44425 10.5 2C10.5 1.17157 11.1716 0.5 12 0.5C12.8284 0.5 13.5 1.17157 13.5 2ZM0 10H2V16H0V10ZM24 10H22V16H24V10ZM9 14.5C9.82843 14.5 10.5 13.8284 10.5 13C10.5 12.1716 9.82843 11.5 9 11.5C8.17157 11.5 7.5 12.1716 7.5 13C7.5 13.8284 8.17157 14.5 9 14.5ZM16.5 13C16.5 12.1716 15.8284 11.5 15 11.5C14.1716 11.5 13.5 12.1716 13.5 13C13.5 13.8284 14.1716 14.5 15 14.5C15.8284 14.5 16.5 13.8284 16.5 13Z"/></svg>`))
+
 // toolbarState is the top bar's inputs.
 type toolbarState struct {
 	query      *core.Signal[string]
@@ -19,7 +22,8 @@ type toolbarState struct {
 	onSettings func()
 }
 
-// toolbar renders the search box and action buttons.
+// toolbar renders the search box and the MCP settings button (robot icon
+// plus the label).
 func toolbar(cx *core.Scope, s toolbarState) core.Node {
 	return core.View{Class: "p-3 gap-2 flex-row items-center", Children: []core.Node{
 		core.View{Class: "flex-1 min-w-0", Children: []core.Node{
@@ -31,7 +35,20 @@ func toolbar(cx *core.Scope, s toolbarState) core.Node {
 				AutoFocus:   true,
 			},
 		}},
-		ui.Button{Text: "设置", OnPress: s.onSettings},
+		ui.Press{
+			OnPress: s.onSettings,
+			Label:   "MCP 设置",
+			Style: core.Style{Padding: core.Symmetric(6, 12), CornerRadius: 6,
+				Background: core.RGB(0x262626), Direction: core.Row, Gap: 6,
+				AlignItems: core.AlignCenter, JustifyContent: core.JustifyCenter},
+			StyleFunc: func() core.Style {
+				return core.Style{Hover: &core.Style{Background: core.RGB(0x2a2a2e)}}
+			},
+			Children: []core.Node{
+				core.Icon{SVG: robotSVG, Style: core.Style{Width: core.Pt(18), Height: core.Pt(18)}},
+				core.Text{Content: "MCP", Style: core.Style{FontSize: 12, Color: core.RGB(0xe5e5e5)}},
+			},
+		},
 	}}
 }
 

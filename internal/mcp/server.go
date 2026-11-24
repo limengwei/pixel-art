@@ -42,6 +42,47 @@ func New(st *store.Store, ds *npy.Dataset) *mcp.Server {
 	return server
 }
 
+// ParamDoc describes one tool parameter for display in the settings panel.
+type ParamDoc struct{ Name, Desc string }
+
+// ToolDoc describes one MCP tool for display in the settings panel.
+type ToolDoc struct {
+	Name   string
+	Desc   string
+	Params []ParamDoc
+}
+
+// ToolsDoc documents every tool the server exposes, mirroring the
+// registrations in New.
+var ToolsDoc = []ToolDoc{
+	{
+		Name:   "search_icons",
+		Desc:   "搜索像素图标，支持中英文关键词（主体、英文描述与中文标签），分页返回 id、subject 和 caption。",
+		Params: []ParamDoc{
+			{Name: "query", Desc: "搜索关键词，中英文均可"},
+			{Name: "subject", Desc: "可选，按主体过滤，如 'aa battery'"},
+			{Name: "page", Desc: "可选，页码，从 1 开始"},
+			{Name: "pageSize", Desc: "可选，每页数量，默认 20"},
+		},
+	},
+	{
+		Name:   "get_icon",
+		Desc:   "按 id 获取一个图标的详情：主体、完整描述与数据集行号。",
+		Params: []ParamDoc{
+			{Name: "id", Desc: "图标 id（search_icons 返回的数字）"},
+		},
+	},
+	{
+		Name:   "export_icon",
+		Desc:   "导出图标为 PNG 文件（最近邻采样保持像素锐利），返回导出文件的绝对路径。",
+		Params: []ParamDoc{
+			{Name: "id", Desc: "图标 id"},
+			{Name: "size", Desc: "可选，导出尺寸（像素），0 表示原始 16x16"},
+			{Name: "directory", Desc: "可选，输出目录，默认临时目录"},
+		},
+	},
+}
+
 type searchArgs struct {
 	Query    string `json:"query" jsonschema:"搜索关键词，中英文均可"`
 	Subject  string `json:"subject,omitempty" jsonschema:"按主体过滤，如 'aa battery'"`
