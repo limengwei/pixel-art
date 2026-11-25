@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/github/v/release/limengwei/pixel-art?label=latest&logo=github" alt="Latest release" /></a>
-  <a href="https://github.com/limengwei/pixel-art/releases"><img src="https://img.shields.io/github/downloads/limengwei/pixel-art/total?label=downloads&logo=github" alt="Downloads" /></a>
 </p>
 
 <p align="center">

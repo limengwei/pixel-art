@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/github/v/release/limengwei/pixel-art?label=%E6%9C%80%E6%96%B0%E7%89%88&logo=github" alt="最新版" /></a>
-  <a href="https://github.com/limengwei/pixel-art/releases"><img src="https://img.shields.io/github/downloads/limengwei/pixel-art/total?label=%E4%B8%8B%E8%BD%BD&logo=github" alt="下载量" /></a>
 </p>
 
 <p align="center">
