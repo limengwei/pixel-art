@@ -22,7 +22,7 @@ import (
 // New builds the MCP server with all tools registered. ds may be nil, in
 // which case export_icon reports the dataset as unavailable.
 func New(st *store.Store, ds *npy.Dataset) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "pixel-art", Version: "1.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "pixel-art", Version: "1.2.0"}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_icons",
