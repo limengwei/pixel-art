@@ -7,6 +7,12 @@
 <p align="center">English | <a href="README.md">中文</a></p>
 
 <p align="center">
+  <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/github/v/release/limengwei/pixel-art?style=flat-square&label=Latest" alt="Latest release"></a>
+  <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/badge/⬇%20Download-Windows%20Installer-blue?style=flat-square" alt="Download Windows installer"></a>
+  <img src="https://img.shields.io/github/downloads/limengwei/pixel-art/total?style=flat-square&label=Downloads" alt="Total downloads">
+</p>
+
+<p align="center">
 A pixel-art icon browser and search tool over the <a href="https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m">Pixel Art Atlas</a> dataset — 1.4 million game sprites.<br>
 Built-in bilingual (EN/中文) full-text search index and an MCP server for AI assistant integration.
 </p>

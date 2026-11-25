@@ -7,6 +7,12 @@
 <p align="center"><a href="README_EN.md">English</a> | 中文</p>
 
 <p align="center">
+  <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/github/v/release/limengwei/pixel-art?style=flat-square&label=最新版" alt="最新版"></a>
+  <a href="https://github.com/limengwei/pixel-art/releases/latest"><img src="https://img.shields.io/badge/⬇%20下载-Windows%20安装包-blue?style=flat-square" alt="下载 Windows 安装包"></a>
+  <img src="https://img.shields.io/github/downloads/limengwei/pixel-art/total?style=flat-square&label=总下载量" alt="总下载量">
+</p>
+
+<p align="center">
 基于 <a href="https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m">Pixel Art Atlas</a> 数据集的像素图标浏览器与检索工具——140 万个游戏精灵图。<br>
 内置中英文全文搜索索引，集成 MCP 服务器可接入 AI 助手使用。
 </p>
